@@ -7,26 +7,41 @@
 // entities. Browser drives the loop via start(); headless drives update() in a plain loop.
 //
 // Declared `var Foo = class Foo` so the class is a global in the browser AND attaches to
-// the headless vm context (a bare `class Foo {}` would be block-scoped and invisible there).
+// the headless main realm (a bare `class Foo {}` would be block-scoped and invisible there).
 var GameEngine = class GameEngine {
   constructor() {
     this.entities = [];
     this.ctx = null;
     this.running = false;
+    this.paused = false;
     this.tick = 0;
+    // frame timing: fps over the last second, and the EMA of a frame's own work (ms)
+    this.fps = 0;
+    this.frameMs = 0;
+    this._frames = 0;
+    this._fpsT0 = 0;
   }
 
   init(ctx) { this.ctx = ctx; }
   add(entity) { this.entities.push(entity); }
   clear() { this.entities = []; this.tick = 0; }
 
-  // browser entry — render-locked loop with fast-forward
+  // browser entry — render-locked loop with fast-forward (stepsPerFrame updates per draw)
   start() {
     this.running = true;
+    this._fpsT0 = nowMs();
     const loop = () => {
       if (!this.running) return;
-      for (let i = 0; i < PARAMETERS.updatesPerDraw; i++) this.update();
+      const t0 = nowMs();
+      if (!this.paused) for (let i = 0; i < PARAMETERS.stepsPerFrame; i++) this.update();
       this.draw();
+      const t1 = nowMs();
+      this.frameMs += 0.1 * ((t1 - t0) - this.frameMs);
+      this._frames++;
+      if (t1 - this._fpsT0 >= 1000) {
+        this.fps = this._frames * 1000 / (t1 - this._fpsT0);
+        this._frames = 0; this._fpsT0 = t1;
+      }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);

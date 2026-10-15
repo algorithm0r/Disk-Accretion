@@ -1,19 +1,45 @@
 'use strict';
 // Single source of truth for every tunable. Serialized verbatim into every saved data
 // packet (see datamanager.js) so any run reconstructs from its stored parameters.
-// Declared `var` so it's a global in the browser AND in the headless vm context.
+// Declared `var` so it's a global in the browser AND in the headless main realm.
+//
+// Units: G = 1, M_star = 1, length unit ≈ 1 AU, so one orbit at r = 1 takes 2π time units
+// and an orbit at radius r takes 2π r^1.5.
 var PARAMETERS = {
-  // --- model ---
-  nAgents: 300,         // number of drifting agents
-  drift: 0.4,           // mean step in +x per tick
-  jitter: 1.2,          // std-dev of random step (x and y)
+  // --- disk (changing any of these rebuilds the disk) ---
+  N: 10000,             // initial number of bodies (all equal mass, diskMass / N)
+  diskMass: 0.003,      // total disk mass in M_star units (planetesimal regime ≪ 1)
+  rIn: 0.5,             // inner edge of the disk
+  rOut: 2.0,            // outer edge
+  sigmaSlope: 1.0,      // surface density Σ ∝ r^-p (p = 1 → uniform in r)
+  dispersion: 0.01,     // random velocity, as a fraction of the local circular speed
+  seed: 1,              // RNG seed for the initial disk (same seed → same disk)
+
+  // --- bodies ---
+  radiusInflation: 30,  // body radius = inflation × (Earth density at r = 1); sets growth speed
+
+  // --- gravity ---
+  gravity: 'bh',        // 'bh' (Barnes-Hut quadtree) | 'brute' (exact O(N²), the reference)
+  theta: 1.0,           // Barnes-Hut opening angle (0 = exact, larger = faster + rougher; with the
+                        // quadrupole, 1.0 is ~2x more accurate than monopole at 0.6)
+  bhGroup: 32,          // grouped tree walk: bodies per group (0 = plain monopole walk per body)
+  softening: 1e-3,      // Plummer softening length ε for body-body forces
+  selfGravity: true,    // false → bodies feel only the star (test particles)
+
+  // --- integrator + removal ---
+  dt: 0.01,             // fixed leapfrog step (inner-edge orbit ≈ 222 steps)
+  collisions: true,     // perfect merging on contact
+  rStar: 0.1,           // bodies inside this radius are accreted by the star
+  rEject: 10,           // bodies beyond this radius are counted as ejected
 
   // --- engine ---
-  updatesPerDraw: 1,    // fast-forward: sim updates per rendered frame
+  stepsPerFrame: 4,     // sim steps per rendered frame
+  bruteMaxN: 20000,     // brute force refuses to start above this N (it would hang the tab)
 
   // --- data collection ---
-  reportingPeriod: 30,  // sample the metric every N ticks
-  epoch: 600,           // a run ends (and ships a packet) at N ticks
+  reportingPeriod: 25,  // sample stats every N steps
+  epoch: 20000,         // a headless run ends (and ships a packet) at N steps
+  autoSave: false,      // browser: ship a packet to the DB at epoch (off for the watchable demo)
 
   // --- database (the standard vendored client, src/db.js) ---
   db: {
@@ -26,9 +52,17 @@ var PARAMETERS = {
 };
 
 // Schema drives the auto-generated control panel (ui.js). One entry per live-tunable.
+//   log: slider moves in log10 space    resets: changing it rebuilds the disk
+//   options: renders a <select>         type 'bool': renders a checkbox
 var PARAM_SCHEMA = [
-  { key: 'nAgents', label: 'Agents', min: 10, max: 2000, step: 10, resets: true },
-  { key: 'drift', label: 'Drift', min: -2, max: 2, step: 0.1 },
-  { key: 'jitter', label: 'Jitter', min: 0, max: 5, step: 0.1 },
-  { key: 'updatesPerDraw', label: 'Speed', min: 1, max: 100, step: 1 },
+  { key: 'N', label: 'Bodies N', min: 100, max: 200000, log: true, round: true, resets: true },
+  { key: 'diskMass', label: 'Disk mass', min: 1e-4, max: 0.1, log: true, resets: true },
+  { key: 'dispersion', label: 'Velocity dispersion', min: 0, max: 0.1, step: 0.001, resets: true },
+  { key: 'radiusInflation', label: 'Radius inflation', min: 1, max: 300, log: true, live: 'radii' },
+  { key: 'stepsPerFrame', label: 'Steps / frame', min: 1, max: 40, step: 1 },
+  { key: 'theta', label: 'θ (Barnes-Hut)', min: 0, max: 1.5, step: 0.05 },
+  { key: 'dt', label: 'dt', min: 0.001, max: 0.03, step: 0.001 },
+  { key: 'gravity', label: 'Gravity', options: ['bh', 'brute'] },
+  { key: 'selfGravity', label: 'Self-gravity', type: 'bool' },
+  { key: 'collisions', label: 'Collisions', type: 'bool' },
 ];

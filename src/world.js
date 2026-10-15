@@ -1,25 +1,277 @@
 'use strict';
-// Domain stub: the world holds all state and advances it. It is an engine entity (has
-// update) but draws nothing — rendering is the Observer's job (model/view separation),
-// which is exactly what lets the same world run headlessly with no canvas.
+// The disk. Holds all state and advances it; draws nothing (the Observer renders it), which
+// is what lets the same world run headlessly with no canvas.
+//
+// State is structure-of-arrays: body i is (x[i], y[i], vx[i], vy[i], m[i], r[i], spin[i]).
+// Alive bodies are always packed into 0..n-1; deaths (merges, accretion, ejection) are
+// flagged during a step and compacted at its end, so every hot loop runs over a dense range.
+//
+// The star is a fixed unit mass at the origin. Its pull is central, so L_z about the origin
+// is conserved; momentum is not (the fixed star soaks it up).
+//
+// One step is leapfrog kick-drift-kick with fixed dt:
+//   v += a·dt/2;  x += v·dt;  [remove, collide+merge, compact];  a = a(x);  v += a·dt/2
+// Collisions run on the drifted positions with the half-kicked (= drift) velocities.
+
+// Body radius per unit m^(1/3), chosen so radiusInflation = 1 is Earth's mean density at
+// r = 1 AU: R_earth/AU = 4.26e-5 and (M_earth/M_sun)^(1/3) = 0.01443 → 2.95e-3.
+var K_RADIUS = 2.95e-3;
+
 var World = class World {
-  constructor(width, height) {
-    this.width = width;
-    this.height = height;
-    this.agents = [];
-    for (let i = 0; i < PARAMETERS.nAgents; i++) {
-      this.agents.push(new Agent(width / 2, height / 2));
+  constructor(params) {
+    this.P = params || PARAMETERS;
+    const N = Math.max(2, Math.round(this.P.N));
+    this.cap = N;
+    this.x = new Float64Array(N); this.y = new Float64Array(N);
+    this.vx = new Float64Array(N); this.vy = new Float64Array(N);
+    this.ax = new Float64Array(N); this.ay = new Float64Array(N);
+    this.m = new Float64Array(N); this.r = new Float64Array(N);
+    this.spin = new Float64Array(N);   // internal angular momentum soaked up by merges
+    this.dead = new Uint8Array(N);
+    this.n = 0;
+    this.t = 0;
+    this.steps = 0;
+
+    // bookkeeping for what leaves the disk (mass + the L_z it carries away)
+    this.massAccreted = 0; this.LAccreted = 0; this.nAccreted = 0;
+    this.massEjected = 0; this.LEjected = 0; this.nEjected = 0;
+    this.nMerges = 0;
+    this.pendingDeaths = 0;
+
+    this.tree = new BarnesHut(N);
+    this.grid = new CollisionGrid(N);
+    this.lastInteractions = 0;
+    this.gravityMode = this.P.gravity;
+    this.timing = { step: 0, gravity: 0, collide: 0, drift: 0 };   // EMA, ms
+
+    this.initDisk();
+    this.computeForces();
+    this.M0 = this.totalMass();
+    this.L0 = this.totalLz();
+  }
+
+  radiusOf(mass) { return this.P.radiusInflation * K_RADIUS * Math.cbrt(mass); }
+
+  // Equal-mass bodies on circular orbits plus a small random velocity. Σ ∝ r^-p means
+  // dN/dr ∝ r^(1-p); sampled by inverting its CDF. The circular speed counts the star plus
+  // the disk mass inside r (a spherical approximation, good to ~diskMass).
+  initDisk() {
+    const P = this.P, N = this.cap, rng = new RNG(P.seed);
+    const rIn = P.rIn, rOut = P.rOut, p = P.sigmaSlope, k = 2 - p;
+    const m0 = P.diskMass / N;
+    this.m0 = m0;
+    const encFrac = (rr) => (Math.abs(k) < 1e-9)
+      ? Math.log(rr / rIn) / Math.log(rOut / rIn)
+      : (Math.pow(rr, k) - Math.pow(rIn, k)) / (Math.pow(rOut, k) - Math.pow(rIn, k));
+    for (let i = 0; i < N; i++) {
+      const u = rng.next();
+      const rr = (Math.abs(k) < 1e-9)
+        ? rIn * Math.pow(rOut / rIn, u)
+        : Math.pow(Math.pow(rIn, k) + u * (Math.pow(rOut, k) - Math.pow(rIn, k)), 1 / k);
+      const phi = rng.next() * TAU;
+      const vc = Math.sqrt((1 + P.diskMass * encFrac(rr)) / rr);
+      // epicyclic ratio: Keplerian σ_φ = σ_r / 2
+      const vr = P.dispersion * vc * rng.normal();
+      const vt = vc + 0.5 * P.dispersion * vc * rng.normal();
+      const c = Math.cos(phi), s = Math.sin(phi);
+      this.x[i] = rr * c; this.y[i] = rr * s;
+      this.vx[i] = vr * c - vt * s; this.vy[i] = vr * s + vt * c;
+      this.m[i] = m0; this.r[i] = this.radiusOf(m0); this.spin[i] = 0;
+    }
+    this.n = N;
+  }
+
+  // the engine entity hook: one sim step per update
+  update() { this.step(); }
+
+  step() {
+    const P = this.P, dt = P.dt, hdt = 0.5 * dt;
+    const x = this.x, y = this.y, vx = this.vx, vy = this.vy, ax = this.ax, ay = this.ay;
+    const t0 = nowMs();
+
+    // kick (half) + drift
+    let n = this.n;
+    for (let i = 0; i < n; i++) {
+      const vxi = vx[i] + ax[i] * hdt, vyi = vy[i] + ay[i] * hdt;
+      vx[i] = vxi; vy[i] = vyi;
+      x[i] += vxi * dt; y[i] += vyi * dt;
+    }
+    this.t += dt;
+    const t1 = nowMs();
+
+    // removal, collisions, compaction
+    this.removeEscapers();
+    if (P.collisions) this.grid.collide(this, dt);
+    if (this.pendingDeaths) this.compact();
+    const t2 = nowMs();
+
+    // forces at the new positions, then the closing half kick
+    this.computeForces();
+    const t3 = nowMs();
+    n = this.n;
+    for (let i = 0; i < n; i++) { vx[i] += ax[i] * hdt; vy[i] += ay[i] * hdt; }
+    this.steps++;
+
+    const t4 = nowMs(), T = this.timing, a = this.steps < 5 ? 1 : 0.1;
+    T.drift += a * ((t1 - t0) + (t4 - t3) - T.drift);
+    T.collide += a * ((t2 - t1) - T.collide);
+    T.gravity += a * ((t3 - t2) - T.gravity);
+    T.step += a * ((t4 - t0) - T.step);
+  }
+
+  // softened body-body gravity (tree or exact), then the exact star term
+  computeForces() {
+    const P = this.P, n = this.n;
+    const x = this.x, y = this.y, ax = this.ax, ay = this.ay;
+    // brute force above bruteMaxN would hang the tab, so it falls back to the tree
+    this.gravityMode = (P.gravity === 'brute' && n <= P.bruteMaxN) ? 'brute' : 'bh';
+    if (!P.selfGravity) {
+      for (let i = 0; i < n; i++) { ax[i] = 0; ay[i] = 0; }
+      this.lastInteractions = 0;
+    } else if (this.gravityMode === 'brute') {
+      bruteForceAccel(x, y, this.m, n, P.softening * P.softening, ax, ay);
+      this.lastInteractions = n * (n - 1) / 2;
+    } else {
+      this.tree.build(x, y, this.m, n, P.theta);
+      const eps2 = P.softening * P.softening;
+      this.lastInteractions = P.bhGroup > 0
+        ? this.tree.accelGrouped(x, y, this.m, n, eps2, ax, ay, P.bhGroup)
+        : this.tree.accel(x, y, this.m, n, eps2, ax, ay);
+    }
+    for (let i = 0; i < n; i++) {
+      const xi = x[i], yi = y[i];
+      const r2 = xi * xi + yi * yi;
+      const inv = 1 / Math.sqrt(r2);
+      const f = inv * inv * inv;
+      ax[i] -= f * xi; ay[i] -= f * yi;
     }
   }
 
-  update(engine) {
-    for (const a of this.agents) a.step(this);
+  // Perfect merge of bodies i and j: mass and momentum conserved, the pair's orbital angular
+  // momentum about their joint centre of mass goes into spin, so (orbital + spin) L_z is
+  // conserved exactly. The heavier body's slot survives. Returns the survivor's index.
+  merge(i, j) {
+    const x = this.x, y = this.y, vx = this.vx, vy = this.vy, m = this.m;
+    const keep = m[j] > m[i] ? j : i, gone = keep === i ? j : i;
+    const mi = m[i], mj = m[j], M = mi + mj;
+    const X = (mi * x[i] + mj * x[j]) / M, Y = (mi * y[i] + mj * y[j]) / M;
+    const VX = (mi * vx[i] + mj * vx[j]) / M, VY = (mi * vy[i] + mj * vy[j]) / M;
+    const Lint =
+      mi * ((x[i] - X) * (vy[i] - VY) - (y[i] - Y) * (vx[i] - VX)) +
+      mj * ((x[j] - X) * (vy[j] - VY) - (y[j] - Y) * (vx[j] - VX));
+    this.spin[keep] = this.spin[i] + this.spin[j] + Lint;
+    x[keep] = X; y[keep] = Y; vx[keep] = VX; vy[keep] = VY;
+    m[keep] = M; this.r[keep] = this.radiusOf(M);
+    this.dead[gone] = 1;
+    this.pendingDeaths++;
+    this.nMerges++;
+    return keep;
   }
 
-  // the metric of interest — mean x, normalised to 0..1
-  meanX() {
+  // bodies that fall into the star or fly past rEject leave the disk; their mass and L_z
+  // are banked so the conservation totals still close
+  removeEscapers() {
+    const P = this.P, n = this.n;
+    const x = this.x, y = this.y, vx = this.vx, vy = this.vy, m = this.m, dead = this.dead;
+    const rs2 = P.rStar * P.rStar, re2 = P.rEject * P.rEject;
+    for (let i = 0; i < n; i++) {
+      const r2 = x[i] * x[i] + y[i] * y[i];
+      if (r2 < rs2 || r2 > re2) {
+        const L = m[i] * (x[i] * vy[i] - y[i] * vx[i]) + this.spin[i];
+        if (r2 < rs2) { this.massAccreted += m[i]; this.LAccreted += L; this.nAccreted++; }
+        else { this.massEjected += m[i]; this.LEjected += L; this.nEjected++; }
+        dead[i] = 1;
+        this.pendingDeaths++;
+      }
+    }
+  }
+
+  // pack the survivors into 0..n-1 (order-preserving)
+  compact() {
+    const n = this.n, dead = this.dead;
+    const x = this.x, y = this.y, vx = this.vx, vy = this.vy, ax = this.ax, ay = this.ay;
+    const m = this.m, r = this.r, spin = this.spin;
+    let w = 0;
+    for (let i = 0; i < n; i++) {
+      if (dead[i]) continue;
+      if (w !== i) {
+        x[w] = x[i]; y[w] = y[i]; vx[w] = vx[i]; vy[w] = vy[i]; ax[w] = ax[i]; ay[w] = ay[i];
+        m[w] = m[i]; r[w] = r[i]; spin[w] = spin[i];
+      }
+      dead[w] = 0;
+      w++;
+    }
+    this.n = w;
+    this.pendingDeaths = 0;
+  }
+
+  // re-derive every radius (the inflation slider changes them live)
+  updateRadii() {
+    for (let i = 0; i < this.n; i++) this.r[i] = this.radiusOf(this.m[i]);
+  }
+
+  // ─── diagnostics ────────────────────────────────────────────────────────────────
+  totalMass() {
     let s = 0;
-    for (const a of this.agents) s += a.x;
-    return s / this.agents.length / this.width;
+    for (let i = 0; i < this.n; i++) s += this.m[i];
+    return s + this.massAccreted + this.massEjected;
+  }
+
+  // orbital + spin L_z of the disk, plus what left it (velocities are synchronised between steps)
+  totalLz() {
+    const x = this.x, y = this.y, vx = this.vx, vy = this.vy, m = this.m, spin = this.spin;
+    let L = 0;
+    for (let i = 0; i < this.n; i++) L += m[i] * (x[i] * vy[i] - y[i] * vx[i]) + spin[i];
+    return L + this.LAccreted + this.LEjected;
+  }
+
+  // Exact energy, O(N²) (tests only). Merges dissipate it, so it is conserved only with
+  // collisions off. Uses the same Plummer-softened potential as the forces.
+  totalEnergy() {
+    const x = this.x, y = this.y, vx = this.vx, vy = this.vy, m = this.m, n = this.n;
+    const eps2 = this.P.softening * this.P.softening;
+    let K = 0, U = 0;
+    for (let i = 0; i < n; i++) {
+      K += 0.5 * m[i] * (vx[i] * vx[i] + vy[i] * vy[i]);
+      U -= m[i] / Math.sqrt(x[i] * x[i] + y[i] * y[i]);
+      if (this.P.selfGravity) {
+        for (let j = i + 1; j < n; j++) {
+          const dx = x[j] - x[i], dy = y[j] - y[i];
+          U -= m[i] * m[j] / Math.sqrt(dx * dx + dy * dy + eps2);
+        }
+      }
+    }
+    return K + U;
+  }
+
+  // the numbers the readouts, the data packets and the smoketest all use
+  stats() {
+    const m = this.m, n = this.n, m0 = this.m0;
+    let maxM = 0, nBig = 0, sum = 0;
+    for (let i = 0; i < n; i++) {
+      const mi = m[i];
+      sum += mi;
+      if (mi > maxM) maxM = mi;
+      if (mi >= 100 * m0) nBig++;
+    }
+    return {
+      t: this.t,
+      steps: this.steps,
+      orbits: this.t / TAU,                 // orbits at r = 1
+      n: n,
+      maxMass: maxM,
+      maxMassRatio: maxM / m0,
+      nBig: nBig,                           // bodies ≥ 100 initial masses
+      diskMass: sum,
+      massAccreted: this.massAccreted,
+      massEjected: this.massEjected,
+      massError: (this.totalMass() - this.M0) / this.M0,
+      LzDrift: (this.totalLz() - this.L0) / this.L0,
+      merges: this.nMerges,
+      msStep: this.timing.step,
+      msGravity: this.timing.gravity,
+      msCollide: this.timing.collide,
+      gravityMode: this.gravityMode,
+    };
   }
 };

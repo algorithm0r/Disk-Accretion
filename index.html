@@ -4,21 +4,41 @@
   <meta charset="utf-8">
   <title>Disk Accretion</title>
   <style>
+    html, body { height: 100%; overflow: hidden; }
     body { margin: 0; background: #11151c; color: #cdd2da; font-family: system-ui, sans-serif; display: flex; }
-    #controlPanel { width: 240px; padding: 14px; box-sizing: border-box; }
-    #controlPanel h3 { margin: 0 0 10px; }
-    .ctl { display: block; margin: 10px 0; font-size: 13px; }
-    .ctl input { width: 100%; }
-    button { background: #2b6cf6; color: #fff; border: 0; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
-    #status { font-size: 12px; color: #8a8f98; margin-top: 12px; }
-    canvas { background: #0b0e13; display: block; }
+    #controlPanel { width: 290px; flex: none; padding: 12px 14px; box-sizing: border-box; height: 100vh; overflow-y: auto; border-right: 1px solid #222832; }
+    #controlPanel h3 { margin: 0 0 4px; }
+    .sub { font-size: 11px; color: #8a8f98; margin-bottom: 10px; line-height: 1.4; }
+    .btns { display: flex; gap: 6px; margin-bottom: 10px; }
+    button { background: #2b6cf6; color: #fff; border: 0; border-radius: 6px; padding: 5px 11px; cursor: pointer; font-size: 13px; }
+    button.alt { background: #2a313c; }
+    #readouts { font-size: 12px; background: #0d1117; border: 1px solid #222832; border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; }
+    .ro { display: flex; justify-content: space-between; gap: 8px; padding: 1.5px 0; }
+    .ro span:first-child { color: #8a8f98; white-space: nowrap; }
+    .ro-val { text-align: right; font-variant-numeric: tabular-nums; }
+    .ctl { display: block; margin: 9px 0; font-size: 12.5px; }
+    .ctl-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .ctl-bool .ctl-head { justify-content: flex-start; }
+    .ctl-val { color: #9fc4ff; font-variant-numeric: tabular-nums; }
+    .ctl input[type=range], .ctl select { width: 100%; }
+    .ctl select { background: #1b212b; color: #cdd2da; border: 1px solid #2a313c; border-radius: 4px; padding: 2px; margin-top: 3px; }
+    #status { font-size: 11px; color: #8a8f98; margin-top: 4px; }
+    canvas { background: #0b0e13; display: block; cursor: grab; }
   </style>
 </head>
 <body>
   <div id="controlPanel">
     <h3>Disk Accretion</h3>
-    <button onclick="reset()">Reset</button>
+    <div class="sub">A disk of bodies around a star: 1/r² gravity (Barnes-Hut), leapfrog,
+      perfect merging on contact. Scroll to zoom, drag to pan, double-click to re-centre, space to pause.</div>
+    <div class="btns">
+      <button onclick="reset()">Reset</button>
+      <button id="pauseBtn" class="alt" onclick="togglePause()">Pause</button>
+      <button class="alt" onclick="resetView()">Fit view</button>
+    </div>
+    <div id="readouts"></div>
     <div id="status"></div>
+    <div id="controls"></div>
   </div>
   <canvas id="gameWorld" width="800" height="600"></canvas>
 
@@ -29,7 +49,8 @@
   <script src="src/params.js"></script>
   <script src="src/db.js"></script>
   <script src="src/engine.js"></script>
-  <script src="src/agent.js"></script>
+  <script src="src/gravity.js"></script>
+  <script src="src/collide.js"></script>
   <script src="src/world.js"></script>
   <script src="src/observer.js"></script>
   <script src="src/charts.js"></script>

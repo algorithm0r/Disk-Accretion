@@ -17,11 +17,16 @@
   `var` attaches to `globalThis` (a bare `class`/`const` would be block-scoped and never
   attach). Main-realm, not `vm`, because `vm` adds a ~7-10x hot-loop tax on per-tick global
   reads and we never need its sandbox isolation (conventions §4). Never fork the sim core.
-- **All DOM lives in `ui.js` + `index.html`.** Sim classes (`world`, `agent`, `observer`,
+- **All DOM lives in `ui.js` + `index.html`.** Sim classes (`world`, `gravity`, `collide`, `observer`,
   `datamanager`) touch zero DOM — that's what keeps them headless-safe.
 - **Particles are structure-of-arrays typed arrays** in `world.js` (Float64Array x, y, vx, vy,
   m, r, ...), not one object per particle; that's what makes many thousands of particles fast
-  enough. `agent.js` may go unused. This is the one deliberate departure from the template.
+  enough. (`agent.js` was removed in Stage 1.) This is the one deliberate departure from the
+  template. Alive bodies are packed into 0..n-1 and compacted every step, so **no body index is
+  stable across steps**; nothing may hold one from one step to the next.
+- **Conservation is the test.** Any change to merging, removal or the integrator must keep
+  `smoketest.mjs` green: mass closes to ~1e-13, brute-force L_z (orbital + spin + banked) to
+  round-off. Merges move orbital L_z into `spin`; don't drop it.
 - **Model/view split:** the world holds state and never draws; the `Observer` renders it.
 - **Config:** one `PARAMETERS` global (`params.js`), serialized verbatim into every saved
   packet. `PARAM_SCHEMA` drives the control panel.
@@ -38,3 +43,7 @@ tokens and a `**Done when:**` criterion. `/log-session` rewrites STATUS — don'
 - Browser: open `index.html`.
 - Headless batch: `node runner.mjs --reps N` (writes to MongoDB via the Server).
 - Smoke (no DB): `node smoketest.mjs` — prints the numbers that go in the DEVLOG entry.
+- Benchmark: `node bench.mjs --spf 4` (and `--spf 1`) — max N at 30 fps, brute vs Barnes-Hut.
+- Viewing: http://localhost:8000/research/Disk%20Accretion/sim/index.html (the always-on Static
+  Server; never start a server just to view). A hidden browser pane suspends
+  requestAnimationFrame, so measure fps there by driving frames synchronously from JS.
