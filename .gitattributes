@@ -1,0 +1,11 @@
+* text=auto
+# deploy-bound files must stay LF or they break on Linux
+*.js   eol=lf
+*.mjs  eol=lf
+*.json eol=lf
+*.html eol=lf
+*.css  eol=lf
+*.sh   eol=lf
+*.py   eol=lf
+# Windows helper scripts stay CRLF
+*.ps1  eol=crlf

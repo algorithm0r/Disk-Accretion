@@ -1,0 +1,10 @@
+node_modules/
+*.log
+.env
+.tokens.json
+*.pem
+.DS_Store
+Thumbs.db
+data/
+# large regenerable exports (regenerate with: node runner.mjs ...)
+*.csv
