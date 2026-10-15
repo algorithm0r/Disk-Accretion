@@ -19,6 +19,9 @@
   reads and we never need its sandbox isolation (conventions §4). Never fork the sim core.
 - **All DOM lives in `ui.js` + `index.html`.** Sim classes (`world`, `agent`, `observer`,
   `datamanager`) touch zero DOM — that's what keeps them headless-safe.
+- **Particles are structure-of-arrays typed arrays** in `world.js` (Float64Array x, y, vx, vy,
+  m, r, ...), not one object per particle; that's what makes many thousands of particles fast
+  enough. `agent.js` may go unused. This is the one deliberate departure from the template.
 - **Model/view split:** the world holds state and never draws; the `Observer` renders it.
 - **Config:** one `PARAMETERS` global (`params.js`), serialized verbatim into every saved
   packet. `PARAM_SCHEMA` drives the control panel.
