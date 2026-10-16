@@ -43,6 +43,10 @@ tokens and a `**Done when:**` criterion. `/log-session` rewrites STATUS — don'
 `Verified:` line (that moves only on a cold `/audit`).
 
 ## Run
+- **Public:** https://github.com/algorithm0r/Disk-Accretion, with GitHub Pages serving `main` at
+  https://algorithm0r.github.io/Disk-Accretion/. A push to `main` goes live, so smoke-test
+  first. Pages sends no COOP/COEP headers, so nothing may require SharedArrayBuffer; the gpu and
+  workers backends must keep falling back to cpu.
 - Browser: open `index.html`.
 - Headless runs: `node runner.mjs --name X --collection batch_NNN --orbits T --set k=v,...
   [--seeds 1,2]` — one config per process; packet to MongoDB over socket (needs `npm install`
