@@ -1,49 +1,49 @@
 # Disk Accretion — STATUS
 *One screen. The current pulse. Overwritten, never appended — for history read DEVLOG.*
 
-**Updated:** 2026-10-15 (Stage 5 close) — refreshed every session close; may carry unverified claims
+**Updated:** 2026-10-16 (Stage 6 close) — refreshed every session close; may carry unverified claims
 **Verified:** 2026-10-15 (scaffold) — last cold audit (`/audit`); the State section is trusted only as of this date
 
 ## Stage
-Stages 1, 2 (target half met), 3 and 5 `[ DONE ]` (all closed 2026-10-15). No stage active.
-`[ PLANNED ]`: Stage 4 (past 5× scale: GPU collisions, multi-step GPU) and Stage 6 (converge the
-hot disks: a step that resolves pericentres and close encounters).
+Stages 1, 2 (target half met), 3, 5 and 6 `[ DONE ]` (6 closed 2026-10-16). No stage active.
+`[ PLANNED ]`: Stage 4 (past 5× scale: GPU collisions, multi-step GPU) and Stage 7 (the disk-mass
+sweep and light disks under the hybrid; a faster hybrid; the demo-default call).
 
 ## State
 - Public repo https://github.com/algorithm0r/Disk-Accretion; Pages serves `main` at
-  https://algorithm0r.github.io/Disk-Accretion/ (live page verified running @ c1da12c).
-- Browser sim with three force backends: cpu (default), workers, gpu (WebGPU). Stepped from the UI
-  in the browser pane @ b457288.
-- smoke PASS 17/17 @ db96a0d-dirty (2026-10-15; sim core unchanged since b457288).
-- Results in `analysis/FINDINGS.md`: 144 runs, MongoDB `diskAccretionDB` batch_001–011 plus local
-  `analysis/runs/` (git-ignored). `python analysis/stage3.py` regenerates fig1–10 and `tables.md`
-  (ran clean this session).
-- Stage 5 dt sweep (batch_007–011): 86 runs in 32 min, all inserted in MongoDB.
+  https://algorithm0r.github.io/Disk-Accretion/. Pushes to `main` go live.
+- Two integrators: leapfrog (browser default) and hybrid (`src/hybrid.js`: Kepler drift +
+  MERCURIUS-style encounters, swept contacts; the one for science runs). Both run from the panel;
+  the hybrid with the cpu and gpu backends was stepped in the browser pane @ d76667d, no console
+  errors.
+- smoke PASS 23/23 @ d76667d (2026-10-16), including hybrid checks 7a–d.
+- Results in `analysis/FINDINGS.md` (§6 = converged hybrid numbers and which earlier headlines
+  they change): 312 runs, MongoDB `diskAccretionDB` batch_001–017 plus local `analysis/runs/`
+  (git-ignored). `python analysis/stage3.py` regenerates fig1–11 and `tables.md` (ran clean).
 
 ## Metrics
-- Max N at 30 fps (i7-12700K / RTX 3070 Ti): CPU tree ~11.5k at 4 steps/frame, ~40k at 1;
-  GPU ~27k / ~88k.
-- Default disk (8 seeds, 3000 orbits), dt-converged to dt/4:
-  - final spacing 7.6 / 7.0 / 7.6 mutual Hill radii at dt 0.01 / 0.005 / 0.0025
-  - ejections 5.4 ± 1.1 / 3.6 ± 0.7 / 5.9 ± 0.9 per run
-  - t½ 2.6 orbits
-- Final big-body e of the default disk: 0.11–0.21, unresolved in dt.
-- Growth time ∝ f^−0.73 for f ≥ 3 (every dt) and ∝ M_disk^−0.76 (dt 0.01 only).
+- Cost at 30 fps (i7-12700K, Node, matched in-page): leapfrog 6.6 ms/step at 10k, max N ~12.0k at
+  4 steps/frame, ~41.6k at 1. Hybrid 15.7 ms/step, max N ~5.7k / ~17.6k (2.4×). GPU backend
+  (leapfrog) ~27k / ~88k.
+- Converged under the hybrid (8 seeds, dt 0.01 / 0.005 / 0.0025): ejections per run f = 1: 70 ± 3
+  (from dt/2), f = 3: 53 ± 3, f = 10: 15 ± 1, fading-30: 23 ± 1, fading-100: 13 ± 1. First ejection
+  in the hot disks ~220–280 orbits.
+- Default disk (8 seeds, 3000 orbits): final e 0.14 ± 0.02 (resolved), spacing 7.0 ± 0.4 mutual
+  Hill radii per run (pooled median 6.5), ejections 4–6 per run, t½ 2.6 orbits.
+- Unchanged: runaway peak M₁/⟨m⟩ ~47 at ~18 orbits; mass-function index q = 2.37 at 10 orbits.
 
 ## Branches
 - `main`, tracking `origin` = https://github.com/algorithm0r/Disk-Accretion (public; GitHub Pages serves `main`)
 
 ## Open
-- Accepted gap: the hot, scattering-heavy disks (f ≤ 3, fading ramps, heavy disks) are not
-  dt-converged at dt/4. They eject fewer bodies, later, at smaller dt. Their removal counts are
-  unquotable until Stage 6.
-- The disk-mass sweep (batch_006) has not been rerun at smaller dt.
-- Chris's call: make fading inflation (f₀ = 30, q = 1) the demo default? It still holds at dt/4,
-  with fewer ejections.
+- The disk-mass sweep (batch_006) and the Toomre runs are still leapfrog at dt = 0.01; the heavy
+  (hot) disks likely over-eject there (Stage 7).
+- Residual flags with no trend: f = 10 final e (0.21 / 0.26 / 0.15), f = 3 t½ ±2%.
+- Chris's call: make fading inflation (f₀ = 30, q = 1) the demo default? Converged, it ejects 23
+  per run (not 36–42).
 
 ## Next action
-Stage 6: an adaptive or hybrid step for pericentre passes and close encounters, keeping smoke
-green; then rerun batch_008/009's hot configs.
+Stage 7: rerun the disk-mass sweep with `integrator: 'hybrid'` (`--set integrator=hybrid`).
 
 ## Blockers
 - none

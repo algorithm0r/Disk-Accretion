@@ -1,6 +1,69 @@
 # Disk Accretion — DEVLOG
 Newest entry on top. **Append only — never edit past entries.**
 
+## 2026-10-16 — Stage 6: hybrid symplectic integrator; the hot disks converge
+
+**Done:** Stage 6, closed. Chris approved it ("ok, let's do stage 6"), relayed from the PA session.
+- **`src/hybrid.js`**, MERCURIUS-style (Chambers 1999; Rein et al. 2019) with the star fixed:
+  - Every body drifts along its exact Kepler orbit (universal variables, Stumpff series,
+    Halley; 2.7 iterations on average).
+  - Pair potentials are split by Chambers's C² changeover at 3 R_H. The kick takes the far part,
+    as the gradient of the split potential (K·F + Φ·K′·r̂, not K·F).
+  - Encounter groups (union-find over a Hermite prediction between the Kepler ends) are
+    re-integrated by adaptive DP5(4) at 1e-11, with star grazing and contact swept over each
+    substep.
+  - r_c is held fixed within a step.
+- **`World`:** `integrator` param ('leapfrog' | 'hybrid') with a panel control and a readout;
+  `removeBody()`; `rc` carried through compaction; hybrid + async GPU/worker providers work.
+  `runner.mjs` packets record the hybrid counters; `bench.mjs --integrator`.
+- **Bugs found on the way:**
+  - The encounter groups merged bodies with `collisions: false`. That gave |ΔE/E| 2e-4, the same as
+    leapfrog, until fixed; the fixed version reaches 3e-9.
+  - Contacts checked only at substep ends let 10% of f = 1 contacts slip through to the
+    end-of-step grid, which delayed merges (t½ 71 against 67). The fix is a swept Hermite check
+    per substep, and batch_015–017 rerun f = 1 and 3 with it.
+  - The candidate-pair search used a needlessly wide reach (2·r_c): 5.3 → 3.6 ms at 10k.
+- **Smoketest checks 7a–d**, all PASS:
+  - e = 0.9 pericentres: |ΔE/E| 7.6e-14 against leapfrog's 0.23.
+  - 2 R_H flyby: position error 4.9e-7 against 2.1e-4; energy 2.5e-8 against 1.5e-7.
+  - Grazing contact found in the drift.
+  - Brute disk: L_z 3e-14.
+  - Self-gravity, collisions off: |ΔE/E| 2.9e-9 against 1.8e-4.
+- **Convergence:** batch_012–014 (`sweep.mjs hybconv`, 84 runs, 61 min) and batch_015–017
+  (`hybmore`, 84 runs, ~85 min), at 16 processes, all inserted in MongoDB.
+  - f = 3 and both fading ramps converge in every quantity from dt to dt/4. f = 1 converges from
+    dt/2 (ejections 59 → 69 → 70).
+  - Default disk final e 0.14 / 0.16 / 0.14 → **0.14 ± 0.02, resolved**.
+  - Converged ejections per run: f = 1 70, f = 3 53, f = 10 15, fading-30 23, fading-100 13.
+- **Headlines that change** (FINDINGS §6):
+  - Leapfrog dt = 0.01 over-ejected in the hot disks by ~45–75% and fed the star 2–3× too often.
+    Stage 5's leapfrog dt/4 values were close to the converged ones.
+  - The first ejection comes at ~220–280 orbits, not ~100.
+  - f = 1 ejects more than f = 3, which confirms Stage 5's reversal of Correction 2.
+  - Fading inflation: 23 ejections per run, not 36–42.
+  - Default-disk spacing is 7.0 ± 0.4 R_H per run, against 7.6 (z = −1.6).
+  - Unchanged: runaway and q = 2.37 at 10 orbits.
+- **Cost:** hybrid 15.7 ms/step at 10k against leapfrog 6.6. Max N at 30 fps: 5.7k against 12.0k
+  at 4 steps/frame, and 17.6k against 41.6k at 1. In-page at 4 steps/frame: leapfrog 10k 34.9 fps,
+  hybrid 10k 14.8 fps, hybrid 5k 33.7 fps. Leapfrog therefore stays the browser default.
+
+**Changed:**
+- New: `src/hybrid.js`; `sweep.mjs` plans hybconv/hybmore (batch_012–017); `stage3.py` `hybconv()`
+  + fig11 + 2 tables; FINDINGS §6 (header, batch table and caveats updated).
+- Code: `src/world.js` (step dispatch, removeBody, rc); `src/params.js` (`integrator`,
+  `hybridHillFac`, `hybridTol`; panel control); `src/ui.js` (Integrator readout); `index.html` +
+  every headless loader (hybrid.js); `runner.mjs` (hybrid counters); `bench.mjs` (`--integrator`);
+  `smoketest.mjs` (§7).
+- Docs: DEVPLAN (integrator design note, Stage 6 closed, new Stage 7); CLAUDE.md and README (two
+  integrators, batch range).
+
+**State:** smoke PASS 23/23 @ d76667d. `python analysis/stage3.py` runs clean (fig1–11). The page
+was checked in the browser pane @ d76667d: hybrid and leapfrog both step, switching works live, no
+console errors. Not done: the disk-mass and Toomre sweeps are still leapfrog (Stage 7).
+
+**Next:** Stage 7, the disk-mass sweep under the hybrid. Chris's call: fading inflation as the demo
+default.
+
 ## 2026-10-15 — Stage 5: dt-convergence of the Stage 3 numbers, and the oligarch crowding
 
 **Done:** Stage 5 (closed). It ran in a side session started from the PA session.
