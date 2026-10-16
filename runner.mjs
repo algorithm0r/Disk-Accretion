@@ -28,7 +28,7 @@ const argv = process.argv.slice(2);
 const flag = (n, d) => { const i = argv.indexOf('--' + n); return i >= 0 ? argv[i + 1] : d; };
 
 const indirectEval = eval; // aliased → indirect eval runs in the global (sloppy) realm
-for (const f of ['util.js', 'params.js', 'gravity.js', 'collide.js', 'world.js']) {
+for (const f of ['util.js', 'params.js', 'gravity.js', 'collide.js', 'hybrid.js', 'world.js']) {
   let src = readFileSync(path.join(__dirname, 'src', f), 'utf8');
   src = src.replace(/^\s*(['"])use strict\1;?/, '');
   indirectEval(src);
@@ -121,7 +121,8 @@ for (const seed of seeds) {
     bodies.push([Math.round(w.m[i] / w.m0), +el.a.toFixed(5), +el.e.toFixed(5)]);
   }
   bodies.sort((p, q) => q[0] - p[0]);
-  const final = Object.assign(sample(w, +(w.t / TAU).toFixed(4)), { bodies: bodies.slice(0, 2000), capped });
+  const final = Object.assign(sample(w, +(w.t / TAU).toFixed(4)), { bodies: bodies.slice(0, 2000), capped,
+    hybrid: w.hybrid ? Object.assign({}, w.hybrid.total) : null });   // encounter counters (Stage 6)
   delete final.spectrum; delete final.big;
   const wallSec = (Date.now() - t0) / 1000;
   const data = { project: 'Disk Accretion', run, collection, samples, final, snaps: snapList, wallSec, m0: w.m0, N0: w.cap };

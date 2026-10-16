@@ -30,6 +30,11 @@
 - **Conservation is the test.** Any change to merging, removal or the integrator must keep
   `smoketest.mjs` green: mass closes to ~1e-13, brute-force L_z (orbital + spin + banked) to
   round-off. Merges move orbital L_z into `spin`; don't drop it.
+- **Two integrators** (`integrator`): `leapfrog` (the browser default, fast) and `hybrid`
+  (`hybrid.js`: exact Kepler drift + MERCURIUS-style close encounters; ~2.2× the cost; the one
+  for science runs). In the hybrid, a body's changeover radius `rc` must not change inside a
+  step (it changes only at creation and merges), the kick uses the gradient of the split
+  *potential* (not K·F), and encounter groups honour `collisions: false`.
 - **Model/view split:** the world holds state and never draws; the `Observer` renders it.
 - **Config:** one `PARAMETERS` global (`params.js`), serialized verbatim into every saved
   packet. `PARAM_SCHEMA` drives the control panel.
@@ -52,10 +57,11 @@ tokens and a `**Done when:**` criterion. `/log-session` rewrites STATUS — don'
   [--seeds 1,2]` — one config per process; packet to MongoDB over socket (needs `npm install`
   for socket.io-client) AND local JSON in `analysis/runs/<batch>/`.
 - Batches: `node sweep.mjs <plan>[+<plan>]` (plans and the run-name grammar are in its header;
-  batch_001–011 are taken), then `python analysis/stage3.py` → `analysis/figures/`, `tables.md`.
+  batch_001–014 are taken), then `python analysis/stage3.py` → `analysis/figures/`, `tables.md`.
   Run names carry `_dt<dt>` when dt is overridden; the dynamics are chaotic, so compare seeds as
   ensembles across dt, never seed against seed. The hot (scattering-heavy) configs are not
-  dt-converged at dt/4 (FINDINGS §4): don't quote their removal counts as converged.
+  dt-converged at dt/4 under leapfrog (FINDINGS §4); Stage 6 reran them with the hybrid
+  (batch_012–014, FINDINGS §6): quote those, not the leapfrog ones.
   `analysis/FINDINGS.md` ties each claim to its figure and command. Runs are fast (the disk
   thins out): a 10k-body 3000-orbit run takes ~2.5 min.
 - Smoke (no DB): `node smoketest.mjs` — prints the numbers that go in the DEVLOG entry.

@@ -1,6 +1,6 @@
 // Headless step-time benchmark: ms per sim step vs N for brute force and Barnes-Hut, and the
 // largest N that fits a 30 fps frame. Same main-realm loading as smoketest.mjs.
-//   node bench.mjs [--spf 4] [--draw-ms 1.5] [--modes brute,bh] [--ns 1000,2000,...]
+//   node bench.mjs [--spf 4] [--draw-ms 1.5] [--modes brute,bh] [--ns 1000,2000,...] [--integrator leapfrog|hybrid]
 //
 // A frame costs stepsPerFrame × (ms per step) + draw. The draw cost is measured in the
 // browser (the "ms / draw" readout) and passed in; the default is the ~10k-body figure.
@@ -13,7 +13,7 @@ import path from 'path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const indirectEval = eval;
-for (const f of ['util.js', 'params.js', 'gravity.js', 'collide.js', 'world.js']) {
+for (const f of ['util.js', 'params.js', 'gravity.js', 'collide.js', 'hybrid.js', 'world.js']) {
   indirectEval(readFileSync(path.join(__dirname, 'src', f), 'utf8').replace(/^\s*(['"])use strict\1;?/, ''));
 }
 process.title = 'Disk Accretion bench';
@@ -21,6 +21,7 @@ const argv = process.argv.slice(2);
 const flag = (k, d) => { const i = argv.indexOf('--' + k); return i >= 0 ? argv[i + 1] : d; };
 const spf = +flag('spf', 4), drawMs = +flag('draw-ms', 1.5), steps = +flag('steps', 20);
 const modes = flag('modes', 'brute,bh').split(',');
+const integrator = flag('integrator', 'leapfrog');
 const budget = 1000 / 30;
 const defaultNs = {
   brute: [500, 1000, 1500, 2000, 2500, 3000, 4000, 6000],
@@ -28,12 +29,12 @@ const defaultNs = {
 };
 const BASE = JSON.parse(JSON.stringify(globalThis.PARAMETERS));
 
-console.log('Disk Accretion bench — node ' + process.version + ', spf=' + spf + ', draw=' + drawMs + ' ms, budget=' + budget.toFixed(1) + ' ms/frame');
+console.log('Disk Accretion bench — node ' + process.version + ', integrator=' + integrator + ', spf=' + spf + ', draw=' + drawMs + ' ms, budget=' + budget.toFixed(1) + ' ms/frame');
 for (const mode of modes) {
   const ns = flag('ns', null) ? flag('ns').split(',').map(Number) : defaultNs[mode];
   const rows = [];
   for (const N of ns) {
-    const P = Object.assign(JSON.parse(JSON.stringify(BASE)), { N, gravity: mode, bruteMaxN: 1e9 });
+    const P = Object.assign(JSON.parse(JSON.stringify(BASE)), { N, gravity: mode, bruteMaxN: 1e9, integrator });
     const w = new World(P);
     for (let s = 0; s < 3; s++) w.step();
     const t0 = performance.now();

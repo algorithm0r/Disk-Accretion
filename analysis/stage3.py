@@ -1,5 +1,5 @@
 """Disk Accretion — Stage 3 analysis and the Stage 5 dt-convergence check. Reads the run packets that sweep.mjs writes to
-analysis/runs/<batch>/*.json (the same packets are in MongoDB, collections batch_001..011)
+analysis/runs/<batch>/*.json (the same packets are in MongoDB, collections batch_001..017)
 and writes the figures to analysis/figures/ and the tables to analysis/tables.md.
 
     python analysis/stage3.py
@@ -586,6 +586,119 @@ def dtconv():
     fig.tight_layout(); fig.savefig(os.path.join(FIG, "fig9_dt_convergence.png"), dpi=140); plt.close(fig)
 
 
+
+# ─── Stage 6: the hybrid integrator's dt-convergence, beside Stage 5's leapfrog ──────────
+HYB_BATCHES = {0.01: ("batch_012", "batch_015"), 0.005: ("batch_013", "batch_016"), 0.0025: ("batch_014", "batch_017")}
+# batch_015–017 rerun f = 1 and f = 3 with contacts swept over each encounter substep; their
+# batch_012–014 runs (contacts checked at substep ends only) are superseded and left out
+HYB_SUPERSEDED = {"batch_012", "batch_013", "batch_014"}, {"f 1", "f 3"}
+
+
+def collect(batchmap, skip=None):
+    groups = defaultdict(lambda: defaultdict(list))
+    walls = defaultdict(list)
+    counters = defaultdict(lambda: defaultdict(float))
+    for dt, batches in batchmap.items():
+        for b in batches:
+            for r in load(b):
+                if abs(P(r)["dt"] - dt) > 1e-12:
+                    raise ValueError(f"{r['run']} in {b} has dt {P(r)['dt']}, expected {dt}")
+                c = config_label(r)
+                if skip and b in skip[0] and c in skip[1]:
+                    continue
+                groups[c][dt].append(run_metrics(r))
+                walls[(c, dt)].append(r["wallSec"])
+                h = r["final"].get("hybrid")
+                if h:
+                    for k in ("contacts", "missed", "bodySteps", "groups"):
+                        counters[c][k] += h[k]
+    return groups, walls, counters
+
+
+def zscore(a, b):
+    (m1, s1, _), (m2, s2, _) = a, b
+    if m1 is None or m2 is None or s1 is None or s2 is None or not (s1 or s2):
+        return None
+    return (m2 - m1) / math.hypot(s1, s2)
+
+
+def hybconv():
+    hyb, hwall, hcount = collect(HYB_BATCHES, HYB_SUPERSEDED)
+    if not hyb:
+        return
+    lf = defaultdict(lambda: defaultdict(list))
+    lwall = defaultdict(list)
+    for fam in DT_BATCHES.values():
+        g, wl, _ = collect(fam)
+        for c, d in g.items():
+            for dt, v in d.items():
+                lf[c][dt] += v
+        for k, v in wl.items():
+            lwall[k] += v
+    order = sorted(hyb, key=lambda c: (c.startswith("default"), "fading" in c, float(c.split()[1]) if not c.startswith("default") else 0))
+    rows, st = [], {}
+    for c in order:
+        for m in METRICS:
+            H = {dt: mean_se([x[m] for x in hyb[c].get(dt, [])]) for dt in DTS}
+            L = {dt: mean_se([x[m] for x in lf[c].get(dt, [])]) for dt in DTS}
+            st[(c, m)] = (H, L)
+            cell = lambda t: "—" if t[0] is None else fmt(t[0]) + (" ± " + fmt(t[1]) if t[1] is not None else "") + f" ({t[2]})"
+            zh, zh2, zl = zscore(H[0.01], H[0.0025]), zscore(H[0.005], H[0.0025]), zscore(L[0.01], L[0.0025])
+            zx = zscore(L[0.0025], H[0.0025])
+            rel = (H[0.0025][0] - H[0.01][0]) / abs(H[0.01][0]) if H[0.01][0] and H[0.0025][0] is not None else None
+            verdict = "—" if zh is None else ("converged" if abs(zh) < 2 and (zh2 is None or abs(zh2) < 2) else "dt-dependent")
+            rows.append([c, m, cell(L[0.01]), cell(L[0.0025]), fmt(zl, 1) if zl is not None else "—",
+                         cell(H[0.01]), cell(H[0.005]), cell(H[0.0025]),
+                         (fmt(rel * 100, 0) + "%") if rel is not None else "—",
+                         fmt(zh, 1) if zh is not None else "—", fmt(zh2, 1) if zh2 is not None else "—", verdict,
+                         fmt(zx, 1) if zx is not None else "—"])
+    table("Stage 6 — hybrid integrator dt-convergence, beside Stage 5's leapfrog. Mean ± SE over seeds (runs). "
+          "LF = leapfrog (Stage 5 batches); HY = hybrid (batch_012 + 015 / 013 + 016 / 014 + 017; f = 1 and 3 from 015–017 only, with swept contacts). z(HY) = (dt/4 − dt) / combined SE; "
+          "z(HY ½→¼) = (dt/4 − dt/2) / SE; converged = both |z| < 2. z(HY vs LF @ dt/4) compares the two integrators "
+          "at their finest step. First-ejection mean is over runs that ejected.",
+          ["config", "quantity", "LF dt 0.01", "LF dt 0.0025", "z(LF)", "HY dt 0.01", "HY dt 0.005", "HY dt 0.0025",
+           "Δ HY", "z(HY)", "z(HY ½→¼)", "verdict", "z(HY vs LF @ dt/4)"], rows)
+
+    # bookkeeping: contacts the drift missed (caught by the end-of-step grid instead), and cost
+    brows = []
+    for c in order:
+        k = hcount[c]
+        wl = [f"{np.mean(lwall[(c, dt)]):.0f} / {np.mean(hwall[(c, dt)]):.0f}" if lwall[(c, dt)] and hwall[(c, dt)] else "—" for dt in DTS]
+        brows.append([c, int(k["contacts"]), int(k["missed"]),
+                      fmt(k["missed"] / (k["contacts"] + k["missed"]) * 100, 2) + "%" if k["contacts"] else "—"] + wl)
+    table("Stage 6 — hybrid bookkeeping (all dt pooled): contacts resolved inside the drift vs found later by the "
+          "end-of-step grid (a body that merges mid-drift grows and can then overlap a neighbour); mean wall time per "
+          "run, leapfrog / hybrid, seconds (16 runs sharing the CPU, so relative only)",
+          ["config", "contacts in drift", "end-of-step contacts", "share", "wall dt 0.01", "wall dt 0.005", "wall dt 0.0025"], brows)
+
+    # Fig 11: each quantity per config, leapfrog (open) and hybrid (filled) at the three dts
+    fig, axs = plt.subplots(2, 3, figsize=(14, 7.6))
+    cols = {0.01: "C0", 0.005: "C1", 0.0025: "C3"}
+    x = np.arange(len(order))
+    for ax, m in zip(axs.flat, METRICS):
+        for j, dt in enumerate(DTS):
+            for kind, off, mk, fill in (("LF", -0.12, "o", "none"), ("HY", 0.12, "s", cols[dt])):
+                xs, ys, es = [], [], []
+                for i, c in enumerate(order):
+                    H, L = st[(c, m)]
+                    mu, se, _ = (L if kind == "LF" else H)[dt]
+                    if mu is not None:
+                        xs.append(i + off + (j - 1) * 0.07); ys.append(mu); es.append(se or 0)
+                ax.errorbar(xs, ys, yerr=es, fmt=mk, ms=4.5, capsize=2, color=cols[dt], mfc=fill,
+                            label=f"{kind} dt = {dt}" if m == METRICS[0] else None)
+        short = lambda c: "default\n(N 10k)" if c.startswith("default") else c.replace(" fading q=1", "\nfading")
+        ax.set_xticks(x); ax.set_xticklabels([short(c) for c in order], fontsize=7.5)
+        ax.set_title(m, fontsize=10)
+        if m in ("ejected", "accreted"):
+            ax.set_yscale("symlog", linthresh=1); ax.set_ylim(bottom=0)
+        elif m in ("first ejection", "t(N halves)"):
+            ax.set_yscale("log")
+        if m == "final Δa/R_H":
+            ax.axhspan(5, 10, color="0.5", alpha=0.2)
+    axs[0][0].legend(fontsize=7, ncol=2)
+    fig.suptitle("Stage 6: hybrid (filled squares) vs leapfrog (open circles) across dt — mean ± SE over seeds", fontsize=11)
+    fig.tight_layout(); fig.savefig(os.path.join(FIG, "fig11_hybrid_convergence.png"), dpi=140); plt.close(fig)
+
 # ─── Stage 5: do the oligarchs crowd, or did the Stage 3 cut count the field? ────────────
 # The Stage 3 spacing cut (k ≥ max(30, 5% of k_max)) admits 40–80 bodies at 10–30 orbits:
 # the leaders and the mid-mass field between them. Feeding-zone spacing is a claim about the
@@ -667,8 +780,9 @@ if __name__ == "__main__":
     toomre()
     inflation()
     dtconv()
+    hybconv()
     feeding()
     with open(os.path.join(HERE, "tables.md"), "w", encoding="utf-8") as fh:
         fh.write("# Disk Accretion — Stage 3 tables\n\nGenerated by `python analysis/stage3.py` from analysis/runs/ "
-                 "(MongoDB batch_001..011). Times are orbits at r = 1.\n\n" + "\n".join(TABLES))
+                 "(MongoDB batch_001..017). Times are orbits at r = 1.\n\n" + "\n".join(TABLES))
     print("\n".join(TABLES))

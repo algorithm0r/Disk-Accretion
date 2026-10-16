@@ -1,4 +1,4 @@
-# Disk Accretion — Stage 3 findings, with the Stage 5 robustness check (2026-10-15)
+# Disk Accretion — Stage 3 findings, with the Stage 5 and Stage 6 robustness checks (2026-10-15/16)
 
 Each claim names the figure/table that carries it and how to regenerate it. All runs are
 headless (`runner.mjs`), launched by `sweep.mjs`, stored in MongoDB `diskAccretionDB` (via the
@@ -7,8 +7,10 @@ research Server) and as local JSON under `analysis/runs/` (git-ignored). Figures
 
 Units: G = M_star = 1, r in AU-like units, time in orbits at r = 1. Disk 0.5–2.0, Σ ∝ r⁻¹,
 dispersion 1% of v_circ, equal initial masses m₀ = M_disk / N, perfect merging, ε = 1e-3, dt = 0.01
-(Stage 3); Stage 5 reruns the inflation sweep and the default disk at dt = 0.005 and 0.0025 (§4).
-**Read §4 before quoting any number from §1–3:** it says which survive at dt/4.
+(Stage 3); Stage 5 reruns the inflation sweep and the default disk at dt = 0.005 and 0.0025 (§4);
+Stage 6 reruns the hot configs and the default disk with a hybrid symplectic integrator (§6).
+**Read §6 before quoting any number from §1–5:** it has the converged numbers and lists, item by
+item, which earlier headlines they change.
 
 | batch | regenerate | what |
 |---|---|---|
@@ -25,6 +27,13 @@ dispersion 1% of v_circ, equal initial masses m₀ = M_disk / N, perfect merging
 | batch_011 | `node sweep.mjs base0025` | batch_005's config, 8 seeds, 3000 orbits, dt = 0.0025 |
 
 batch_007–011 run together as `node sweep.mjs dtconv` (86 runs, 32 min at 16 processes).
+
+| batch | regenerate | what (Stage 6, `integrator: 'hybrid'`, run names `_hyb`) |
+|---|---|---|
+| batch_012 / 013 / 014 | `node sweep.mjs hybconv` | f = 1, 3, 10 and both fading ramps (4 seeds) + the default disk (8 seeds), dt = 0.01 / 0.005 / 0.0025 |
+| batch_015 / 016 / 017 | `node sweep.mjs hybmore` | contacts swept over each encounter substep: f = 1 and 3 seeds 1–8 (supersede 012–014 for those two), f = 10 and the ramps seeds 5–8 |
+
+Stage 6: 168 runs, ~2.5 h wall at 16 processes.
 
 ## 1. Runaway → oligarchic → spacing: reproduced, with a 2D twist
 
@@ -229,12 +238,122 @@ spacing of the hot configs unconverged there.
   to keep the leaders' e·a below R_H. Telling them apart needs a 3D option or many more field
   bodies per leader.
 
+## 6. Stage 6: the hybrid integrator, and which numbers change
+
+**The integrator** (`src/hybrid.js`; DEVPLAN integrator note). It is MERCURIUS-style with a fixed
+star. Every body drifts along its exact Kepler orbit. Body-body forces are split per pair by a
+smooth changeover at 3 Hill radii: the far part goes in the leapfrog kicks, and bodies predicted
+to come within the changeover radius during a step are integrated together over the drift by an
+adaptive Dormand–Prince 5(4) at 1e-11. Contact is found inside that integration, swept over each
+substep, so it happens at the right time. Leapfrog stays in the code (`integrator: 'leapfrog'`,
+still the browser default) for comparison.
+
+**What the smoketest shows** (`node smoketest.mjs`, checks 7a–d):
+
+| check | hybrid | leapfrog |
+|---|---|---|
+| star-only e = 0.9 orbit, peak \|ΔE/E\| over 20 orbits at dt 0.01 | 7.6e-14 | 0.23 |
+| two-body flyby to 2.0 R_H (inside the switch): position error vs a dt = 1e-5 reference | 4.9e-7 | 2.1e-4 |
+| same flyby, peak \|ΔE/E\| | 2.5e-8 | 1.5e-7 |
+| disk with self-gravity, collisions off, \|ΔE/E\| over 2 orbits at dt 0.01 | 2.9e-9 | 1.8e-4 |
+| brute-gravity disk with merging: mass error / L_z drift | 4e-15 / 3e-14 | 4e-15 / 2e-15 |
+| grazing collision: contact found inside the drift; mass, L_z conserved | yes, L_z 3e-16 | — |
+
+The leapfrog energy error that §4 traced to pericentres and close encounters is gone in both
+cases. The flyby's remaining 2.5e-8 is the ordinary second-order splitting error, about
+(m/M)·(Ω·dt)², and it falls 16× at dt/4.
+
+**Convergence** (batch_012–017; fig11_hybrid_convergence; table "Stage 6 — hybrid integrator
+dt-convergence" in tables.md). The hot configs have 8 seeds and the default disk 8, each at
+dt = 0.01, 0.005, 0.0025. A quantity counts as converged when both |z(dt → dt/4)| and
+|z(dt/2 → dt/4)| are < 2. Mean ± SE per run:
+
+| config | ejected (dt / dt/2 / dt/4) | accreted | first ejection (orbits) | final e (≥30 m₀) | final Δa/R_H |
+|---|---|---|---|---|---|
+| f = 1 | 59 ± 3 / **69 ± 4 / 70 ± 3** | 14 / 15 / 14 | 425 / 374 / 415 | 0.39 / 0.39 / 0.41 | 3.9 / 4.5 / 4.1 |
+| f = 3 | 52 ± 2 / 50 ± 3 / 53 ± 3 | 6.0 / 7.0 / 6.5 | 226 / 243 / 218 | 0.30 / 0.31 / 0.35 | 6.9 / 8.1 / 8.7 |
+| f = 10 | 14 ± 1 / 16 ± 2 / 15 ± 1 | 1.4 / 0.9 / 0.6 | 155 / 145 / 183 | 0.21 / 0.26 / 0.15 † | 8.2 / 7.2 / 7.2 |
+| fading from 30 | 23 ± 1 / 22 ± 1 / 23 ± 2 | 4.9 / 4.5 / 3.5 | 231 / 244 / 283 | 0.40 / 0.41 / 0.40 | 6.1 / 5.2 / 6.6 |
+| fading from 100 | 13 ± 1 / 12 ± 1 / 13 ± 2 | 2.5 / 3.0 / 3.0 | 281 / 256 / 230 | 0.37 / 0.41 / 0.40 | 6.7 / 7.4 / 7.3 |
+| default disk | 4.3 ± 0.6 / 4.5 ± 0.4 / 5.5 ± 0.9 | 0 / 0 / 0.1 | 323 / 266 / 501 | **0.14 / 0.16 / 0.14** | 7.2 / 7.3 / 7.0 |
+
+- **The hot configs converge.** For f = 3 and both fading ramps, every quantity holds within seed
+  scatter across a factor 4 in dt: ejections, accretion, first ejection, final e, spacing and t½.
+  So does every quantity for f = 1 except ejections, which need dt ≤ 0.005 (59 → 69 → 70; at
+  dt = 0.01 the hybrid under-ejects by ~15%). Quote f = 1 from dt ≤ 0.005.
+- **The default disk's final e is resolved: 0.14 ± 0.02** (0.14 / 0.16 / 0.14). Stage 5's 0.21 at
+  leapfrog dt/4 was the outlier.
+- **Still flagged:** † f = 10's final e (z = −3.6 from dt/2 to dt/4, with no monotone trend), and
+  f = 3's t½ wobbling by 2% (22.6 / 23.1 / 22.7). Neither moves a conclusion. Out of 72 z-tests a
+  few |z| > 2 are expected by chance.
+- **Contacts are resolved in the drift.** Fewer than 0.05% of contacts (f = 1) and ≤ 0.02%
+  elsewhere are left to the end-of-step grid. Those are mostly a body that grew in a mid-drift merge
+  and then overlaps a neighbour. The first hybrid pass checked contact only at substep ends, and
+  10% of f = 1 contacts slipped through to the grid. That delayed merges, and its f = 1 t½ at
+  dt = 0.01 read 71 orbits instead of 67. The swept check fixed both; batch_015–017 supersede
+  batch_012–014 for f = 1 and f = 3.
+
+**What changes in the Stage 3 and Stage 5 headlines** (hybrid at converged dt, against what §1–5
+said):
+
+1. **Hot-disk removal counts.** Stage 3's leapfrog at dt = 0.01 over-ejected in the hot disks:
+
+   | config | Stage 3 (leapfrog dt = 0.01) | hybrid |
+   |---|---|---|
+   | f = 3 | 61–90 | 52 ± 3 |
+   | fading 30 | 36–42 | 23 ± 1 |
+   | fading 100 | 20–22 | 13 ± 1 |
+
+   It also fed the star 2–3× too often. Stage 5's leapfrog dt/4 removal counts turn out to be close
+   to the converged ones: for ejections and accretion, every |z(HY vs LF @ dt/4)| ≤ 1.3. Stage 5
+   read them as lower bounds; they are not far off.
+2. **First ejection in the hot disks comes at ~220–280 orbits, not ~100.** Leapfrog at dt = 0.01
+   ejected the first body 2–3× too early. Stage 5 reported 205–228 at dt/4 and said it was still
+   moving. The hybrid agrees with those values (z ≤ 2.3) and stays put across dt.
+3. **The inflation account (§3) holds, with Stage 5's reversal of Correction 2 confirmed.** Converged
+   ejections per run fall monotonically as inflation rises:
+
+   | inflation | 1 | 3 | 10 | 30 | 100 |
+   |---|---|---|---|---|---|
+   | ejections per run | 70 ± 3 | 53 ± 3 | 15 ± 1 | ~2 | 0 |
+
+   All at N = 5000 and 1000 orbits. The f = 30 and 100 values are leapfrog at dt/4, which converged
+   there in Stage 5. So f = 1 ejects *more* than f = 3. Stage 3's "f = 1 ejects fewer" was a dt
+   artifact, as §4 suspected. Fading inflation still restores scattering (23 ejections against ~2
+   at constant f = 30, same N and duration), but at about half what §3 said.
+4. **Final spacing of the default disk: 7.0 ± 0.4 R_H per run (pooled median 6.5),** against
+   Stage 3's 7.6 (per-run 7.9 ± 0.5). That is a small shift (z = −1.6), still inside the 5–10 band.
+   The hot configs' final spacing, which Stage 5 found unconverged (f = 3: 4.2 → 9.2), converges to
+   ~7–9 R_H (f = 3), ~4 (f = 1) and ~5–7 (ramps).
+5. **Unchanged:** the growth-phase numbers. The runaway peak M₁/⟨m⟩ is 47–48 around 18–19 orbits
+   (Stage 3: 41 ± 4 at 21). The mass-function index at 10 orbits is q = 2.37–2.38 (Stage 3: 2.35).
+   t½ for every config agrees with Stage 5's dt/4 values, and so does the growth exponent.
+
+**Cost** (`node bench.mjs --modes bh --integrator leapfrog|hybrid --spf 4|1`, i7-12700K; matched
+in the browser):
+
+| | ms/step at 10k | max N at 30 fps, 4 steps/frame | max N at 30 fps, 1 step/frame |
+|---|---|---|---|
+| leapfrog | 6.6 | ~12,000 | ~41,600 |
+| hybrid | 15.7 | ~5,700 | ~17,600 |
+
+In-page with 4 steps/frame: leapfrog 34.9 fps at 10k, hybrid 14.8 fps at 10k and 33.7 at 5k. The
+hybrid costs ~2.4×, because about half the bodies of the dense early disk are inside some pair's
+3 R_H changeover radius at any time. That is MERCURIUS's known cost in planetesimal disks. Since it
+halves the browser's capacity, leapfrog stays the default; the hybrid is the integrator for
+science runs and is selectable in the panel. Batch wall time is 1.4–2.3× leapfrog's.
+
+**Not rerun with the hybrid:** the disk-mass sweep (batch_006) and the Toomre runs (batch_004).
+The heavy disks are hot, so their late-phase counts still carry leapfrog's dt = 0.01 bias (likely
+over-ejection, by the pattern in item 1).
+
 ## Caveats
 
-- 2D, perfect merging (no fragmentation), fixed dt with under-resolved closest encounters and
-  pericentre passes (DEVPLAN integrator note). §4 tested this: the default disk and f ≥ 10 hold at
-  dt/4, but the hot, scattering-heavy configs do not. They need an adaptive or hybrid step before
-  their removal counts are quoted.
-- Seeds: 8 for the default disk (at each of the three dt), 4 per inflation config (at each dt),
-  and 2 per disk-mass point. The sweep tables show each seed (a/b/…), so the scatter is visible.
+- 2D, perfect merging (no fragmentation). Under fixed-dt leapfrog the closest encounters and
+  pericentre passes are under-resolved (DEVPLAN integrator note). §4 found the default disk and
+  f ≥ 10 hold at dt/4 while the hot configs did not; §6 reran those with the hybrid integrator, which
+  converges them. Numbers in §1–3 for hot disks are superseded by §6. The disk-mass sweep and the
+  Toomre runs are still leapfrog at dt = 0.01.
+- Seeds: 8 for the default disk (at each of the three dt, both integrators), 4 per inflation config
+  under leapfrog and 8 per hot config under the hybrid (at each dt), and 2 per disk-mass point. The sweep tables show each seed (a/b/…), so the scatter is visible.
 - Spacing uses bodies with k ≥ max(30 m₀, 5% of the largest), bound orbits inside r = 5.

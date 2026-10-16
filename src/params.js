@@ -28,6 +28,9 @@ var PARAMETERS = {
   selfGravity: true,    // false → bodies feel only the star (test particles)
 
   // --- integrator + removal ---
+  integrator: 'leapfrog', // 'leapfrog' (fixed-step KDK) | 'hybrid' (Kepler drift + resolved encounters)
+  hybridHillFac: 3,     // hybrid: changeover radius in Hill radii (MERCURIUS default 3)
+  hybridTol: 1e-11,     // hybrid: relative tolerance of the encounter integrator (DP5(4))
   dt: 0.01,             // fixed leapfrog step (inner-edge orbit ≈ 222 steps)
   collisions: true,     // perfect merging on contact
   rStar: 0.1,           // bodies inside this radius are accreted by the star
@@ -67,6 +70,7 @@ var PARAM_SCHEMA = [
   { key: 'stepsPerFrame', label: 'Steps / frame', min: 1, max: 40, step: 1 },
   { key: 'theta', label: 'θ (Barnes-Hut)', min: 0, max: 1.5, step: 0.05 },
   { key: 'dt', label: 'dt', min: 0.001, max: 0.03, step: 0.001 },
+  { key: 'integrator', label: 'Integrator', options: ['leapfrog', 'hybrid'] },
   { key: 'gravity', label: 'Gravity (cpu)', options: ['bh', 'brute'] },
   { key: 'backend', label: 'Force backend', options: ['cpu', 'workers', 'gpu'], live: 'backend' },
   { key: 'selfGravity', label: 'Self-gravity', type: 'bool' },

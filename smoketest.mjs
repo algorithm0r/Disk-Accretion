@@ -24,7 +24,7 @@ import path from 'path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const indirectEval = eval; // aliased → runs in the global (sloppy) realm, so `var` leaks to globalThis
-for (const f of ['util.js', 'params.js', 'gravity.js', 'collide.js', 'world.js']) {
+for (const f of ['util.js', 'params.js', 'gravity.js', 'collide.js', 'hybrid.js', 'world.js']) {
   let src = readFileSync(path.join(__dirname, 'src', f), 'utf8');
   src = src.replace(/^\s*(['"])use strict\1;?/, ''); // strip directive so declarations leak to global
   indirectEval(src);
@@ -39,6 +39,7 @@ function check(name, ok, detail) {
   if (!ok) failures++;
 }
 const e = (v) => v.toExponential(2);
+const e_ = e;   // for blocks that use e as a variable
 
 // run a world for `orbits` orbits at r = 1, tracking N monotonicity and the worst L_z drift
 function evolve(P, orbits) {
@@ -169,6 +170,84 @@ check('bh: N non-increasing, bodies grow', bh.monotone && bh.s.n < 3000 && bh.s.
   let same = covered === n;
   for (let i = 0; i < n && same; i++) same = sx[i] === fx[i] && sy[i] === fy[i];
   check('worker-pool split: 7 slices reproduce the serial walk bit-for-bit', same, 'covered ' + covered + '/' + n);
+}
+
+// ─── 7. the hybrid integrator (Kepler drift + resolved close encounters) ──────────────────
+{
+  const hyb = (over) => params(Object.assign({ integrator: 'hybrid' }, over));
+
+  // 7a. pericentre: a star-only e = 0.9 orbit, 20 orbits at dt = 0.01. Leapfrog loses ~20% of
+  //     its energy here (FINDINGS §4); the Kepler drift is exact.
+  {
+    const e = 0.9, ra = 1 + e, va = Math.sqrt((1 - e) / (1 + e));
+    const run = (integrator) => {
+      const w = new World(params({ N: 2, integrator, selfGravity: false, collisions: false, rStar: 0.01 }));   // q = 0.1: keep it out of the star
+      w.n = 1; w.x[0] = ra; w.y[0] = 0; w.vx[0] = 0; w.vy[0] = va; w.m[0] = 1e-9; w.r[0] = 1e-9;
+      w.syncIntegrator();
+      const E0 = w.totalEnergy(); let worst = 0;
+      for (let s = 0; s < Math.round(20 * TAU / w.P.dt); s++) { w.step(); worst = Math.max(worst, Math.abs((w.totalEnergy() - E0) / E0)); }
+      return worst;
+    };
+    const lf = run('leapfrog'), hy = run('hybrid');
+    check('hybrid: e = 0.9 pericentre passes, |dE/E| < 1e-12 over 20 orbits', hy < 1e-12, 'hybrid ' + e_(hy) + ' vs leapfrog ' + e_(lf));
+  }
+
+  // 7b. a two-body flyby that passes inside the changeover radius (closest 2.0 mutual Hill radii),
+  //     collisions off, against a high-precision reference (leapfrog at dt = 1e-5, |dE/E| ~1e-13)
+  {
+    const flyby = (integrator, dt) => {
+      const w = new World(params({ N: 2, integrator, dt, collisions: false }));
+      const m = 1e-4, rh = Math.cbrt(2 * m / 3), a2 = 1 + 2.2 * rh, ph = 0.12, v2 = 1 / Math.sqrt(a2);
+      w.m[0] = m; w.m[1] = m; w.r[0] = 1e-6; w.r[1] = 1e-6;
+      w.x[0] = 1; w.y[0] = 0; w.vx[0] = 0; w.vy[0] = 1;
+      w.x[1] = a2 * Math.cos(ph); w.y[1] = a2 * Math.sin(ph); w.vx[1] = -v2 * Math.sin(ph); w.vy[1] = v2 * Math.cos(ph);
+      w.syncIntegrator();
+      const E0 = w.totalEnergy(); let worst = 0, dmin = Infinity;
+      for (let s = 0; s < Math.round(4 / dt); s++) {
+        w.step();
+        worst = Math.max(worst, Math.abs((w.totalEnergy() - E0) / E0));
+        dmin = Math.min(dmin, Math.hypot(w.x[1] - w.x[0], w.y[1] - w.y[0]) / rh);
+      }
+      return { worst, dmin, pos: [w.x[0], w.y[0], w.x[1], w.y[1]], groups: w.hybrid ? w.hybrid.total.groups : 0 };
+    };
+    const ref = flyby('leapfrog', 1e-5), lf = flyby('leapfrog', 0.01), hy = flyby('hybrid', 0.01);
+    const dist = (r) => Math.hypot(r.pos[0] - ref.pos[0], r.pos[1] - ref.pos[1], r.pos[2] - ref.pos[2], r.pos[3] - ref.pos[3]);
+    check('hybrid: flyby inside r_c matches the dt = 1e-5 reference to < 1e-5 (leapfrog ≫)',
+      hy.groups > 0 && dist(hy) < 1e-5 && dist(lf) > 30 * dist(hy),
+      'closest ' + hy.dmin.toFixed(2) + ' R_H, |x − ref| hybrid ' + e_(dist(hy)) + ' vs leapfrog ' + e_(dist(lf)) + ', encounter steps ' + hy.groups);
+    check('hybrid: flyby energy error < 5e-8 and below leapfrog\'s', hy.worst < 5e-8 && hy.worst < lf.worst,
+      'hybrid ' + e_(hy.worst) + ' vs leapfrog ' + e_(lf.worst));
+  }
+
+  // 7c. a grazing collision: contact is found inside the drift (not by the end-of-step grid)
+  {
+    const w = new World(hyb({ N: 2 }));
+    const m = 1e-4, rh = Math.cbrt(2 * m / 3), a2 = 1 + 0.3 * rh, ph = 0.05, v2 = 1 / Math.sqrt(a2);
+    w.m[0] = m; w.m[1] = m; w.r[0] = 0.2 * rh; w.r[1] = 0.2 * rh;
+    w.x[0] = 1; w.y[0] = 0; w.vx[0] = 0; w.vy[0] = 1;
+    w.x[1] = a2 * Math.cos(ph); w.y[1] = a2 * Math.sin(ph); w.vx[1] = -v2 * Math.sin(ph); w.vy[1] = v2 * Math.cos(ph);
+    w.syncIntegrator();
+    w.M0 = w.totalMass(); w.L0 = w.totalLz();
+    for (let s = 0; s < 2000 && w.n > 1; s++) w.step();
+    const s = w.stats();
+    check('hybrid: contact found inside the drift, merge conserves mass and L_z',
+      w.n === 1 && w.hybrid.total.contacts === 1 && w.hybrid.total.missed === 0 && Math.abs(s.massError) < 1e-14 && Math.abs(s.LzDrift) < 1e-10,
+      'contacts ' + w.hybrid.total.contacts + ', missed ' + w.hybrid.total.missed + ', L_z ' + e_(s.LzDrift));
+  }
+
+  // 7d. a disk with brute gravity: mass closes, L_z to near round-off (Kepler drift and the
+  //     symmetric kicks conserve it exactly; only the 1e-11 encounter integrator does not), N
+  //     non-increasing; and with collisions off, energy far better than leapfrog's 1.8e-4 (§4)
+  {
+    const r = evolve(hyb({ N: 600, gravity: 'brute', radiusInflation: 60 }), 2);
+    check('hybrid: brute disk, mass closes, |dL_z/L_z| < 1e-9, N non-increasing, merges',
+      Math.abs(r.s.massError) < 1e-12 && r.worstLz < 1e-9 && r.monotone && r.s.merges > 0,
+      'mass ' + e_(r.s.massError) + ', L_z ' + e_(r.worstLz) + ', n 600 -> ' + r.s.n + ', missed ' + r.w.hybrid.total.missed);
+    const w = new World(hyb({ N: 400, gravity: 'brute', collisions: false }));
+    const E0 = w.totalEnergy(); let worst = 0;
+    for (let s = 0; s < Math.round(2 * TAU / w.P.dt); s++) { w.step(); if (s % 50 === 0) worst = Math.max(worst, Math.abs((w.totalEnergy() - E0) / E0)); }
+    check('hybrid: no collisions, self-gravity |dE/E| < 1e-7 at dt = 0.01 (leapfrog 1.8e-4)', worst < 1e-7, 'worst ' + e_(worst));
+  }
 }
 
 console.log(failures ? 'smoke: FAIL (' + failures + ')' : 'smoke: PASS');

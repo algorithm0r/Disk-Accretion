@@ -17,11 +17,14 @@
   `analysis/stage3.py` (9 figures, tables) and `analysis/FINDINGS.md`.
 - **Stage 5 (2026-10-15):** dt-convergence batches (`sweep.mjs dtconv`, batch_007–011, 86 runs),
   `stage3.py` convergence table + fig9 and leader-spacing analysis + fig10, FINDINGS §4–5.
+- **Stage 6 (2026-10-16):** the hybrid symplectic integrator (`src/hybrid.js`: Kepler drift,
+  MERCURIUS-style changeover, DP5(4) encounter groups, swept contacts), `integrator` param + panel
+  control, smoketest checks 7a–d, `bench.mjs --integrator`, batch_012–017 (168 runs),
+  `stage3.py hybconv()` + fig11, FINDINGS §6.
 
 ## Not yet built
 - 5× scale-up: GPU collisions, multi-step GPU integration, SharedArrayBuffer (Stage 4).
-- A step that resolves pericentre passes and close encounters, so the hot-disk (scattering)
-  numbers converge (Stage 6; see the integrator note below).
+- Hybrid reruns of the disk-mass sweep and the light disks; a faster hybrid (Stage 7).
 
 ## Origin
 Came out of a PA conversation with Chris (2026-10-15): "a 2d rotating disk of particles that
@@ -61,6 +64,42 @@ are not: they eject 26–44% fewer bodies and eject first ~2× later at dt/4, st
 dt/2 and dt/4. A star-only orbit at e = 0.9 (q = 0.1) carries |ΔE/E| 0.23 at dt = 0.01 against
 1.5e-2 at dt/4, so pericentre passes near the star are a likely cause, alongside fast close
 encounters (FINDINGS §4).
+
+**Integrator, second option: hybrid symplectic (Stage 6, 2026-10-16; `src/hybrid.js`,
+`integrator: 'hybrid'`).** MERCURIUS-style (Chambers 1999; Rein et al. 2019, arXiv:1903.04972)
+with the star fixed, so no Jacobi or democratic-heliocentric coordinates are needed.
+H = Σ Kepler_i + Σ_pairs Φ·K(r) + Σ_pairs Φ·(1 − K(r)).
+- **Kick:** the far part, −∇(Φ·K) = K·F + Φ·K′·r̂. It is the gradient of the split potential,
+  not K times the force; the first is what keeps the split Hamiltonian. The tree computes the full
+  softened force, then the near part of each close pair is subtracted exactly.
+- **Drift:** each body moves along its exact Kepler orbit. The solver uses universal variables
+  with Stumpff series and Halley iteration (2.7 iterations on average), and handles elliptic and
+  hyperbolic orbits. This is what fixes Stage 5's pericentre error: an e = 0.9 orbit holds
+  |ΔE/E| = 7.6e-14 over 20 orbits at dt = 0.01, against 0.23 for leapfrog.
+- **Encounters:** bodies predicted to come within r_c during the drift are grouped (union-find
+  over a cubic-Hermite interpolation of each candidate pair between its two Kepler ends). Each
+  group is re-integrated over the drift by adaptive Dormand–Prince 5(4) at rtol 1e-11, on the star
+  plus the near-part forces. Contact (merge) and star-grazing are checked at every substep, so
+  contact happens at the right time rather than at a step end.
+- **K and r_c:** K(r) is Chambers's C² polynomial, which is REBOUND's `L_mercury` (10y³ − 15y⁴ +
+  6y⁵ on y = (r − 0.1 r_c)/0.9 r_c). r_c,i = max(3 R_H,i, 2R_i, 0.4 v_i dt). It is set when a body
+  is created or merges and is then held fixed: the paper's pitfall is a K that changes within a
+  step. Pair r_c = max(r_c,i, r_c,j).
+
+Why not something simpler: the two error sources Stage 5 found (pericentres near the star and
+close encounters) are exactly what the Kepler drift and the encounter groups remove, and the
+smoketest shows both. A per-body adaptive step would fix them too, but it isn't symplectic, so it
+would drift in energy over the 1000–3000-orbit runs. Why DP5(4) rather than IAS15: a group's
+motion over one step is smooth and short (~2 substeps per group-step at 1e-11), so a 5th-order
+adaptive RK reaches the tolerance cheaply, and IAS15's 15th-order machinery isn't needed at
+prototype level.
+*Measured:*
+- Self-gravity with collisions off: |ΔE/E| 3e-9 at dt = 0.01 (leapfrog 1.8e-4).
+- A 2 R_H flyby: position error vs a dt = 1e-5 reference 4.9e-7 (leapfrog 2.1e-4).
+- Cost ~2.2× leapfrog: about half the bodies of the dense early disk sit in an encounter group
+  at 3 R_H. That is MERCURIUS's known cost in planetesimal disks.
+- So **leapfrog stays the browser default** (max N at 30 fps would fall from ~11k to ~5k), and
+  the hybrid is the science integrator, selectable in the panel.
 
 **Collisions = perfect merge.** Merges conserve mass, momentum and angular momentum but dissipate
 energy. *Amended 2026-10-15:* orbital L_z alone is NOT conserved by a merge: the pair's orbital
@@ -222,17 +261,35 @@ oligarchic phase the big bodies crowd at ≪ 1 R_H rather than sitting isolated.
 ✓ Met for the default disk and f ≥ 10 (FINDINGS §4, mean ± SE over seeds at three dt). For the
 hot configs the finding is that fixed-dt numbers do not converge by dt/4, which moved to Stage 6.
 
-### Stage 6 — Converge the hot disks  [ PLANNED ]
+### Stage 6 — Converge the hot disks  [ DONE ] (closed 2026-10-16)
 (From Stage 5.)
-- [ ] A step that resolves pericentre passes and close encounters (per-body adaptive step,
-      or a hybrid à la MERCURIUS), keeping `smoketest.mjs` green. Then rerun batch_008/009's hot
-      configs and check that ejection counts and first-ejection times stop moving with dt.
-- [ ] Rerun the disk-mass sweep (batch_006) at dt/4, or with the new step. Heavy disks are hot,
-      so their late-phase counts are unconverged.
-- [ ] A larger N for the light disks (M ≤ 3e-4), the closest thing here to a quiet oligarchy
-- [ ] Decide the demo default: fading inflation (f₀ = 30, q = 1) keeps fast early growth and
-      restores scattering (Chris's call; still holds at dt/4, with fewer ejections)
+- [x] A step that resolves pericentre passes and close encounters: the hybrid symplectic integrator
+      (`src/hybrid.js`, `integrator: 'hybrid'`; design note above). Exact Kepler drift,
+      MERCURIUS-style changeover at 3 R_H, adaptive DP5(4) encounter groups with swept contact
+      detection. Smoketest checks 7a–d (23/23 PASS). Leapfrog is kept as the comparison path and
+      browser default.
+- [x] Rerun the hot configs at dt, dt/2, dt/4: batch_012–017 (`node sweep.mjs hybconv`, then
+      `hybmore`; 168 runs), 8 seeds per config, plus the default disk (8 seeds). `stage3.py`
+      `hybconv()`, table + fig11, FINDINGS §6.
+- ~~Rerun the disk-mass sweep (batch_006) at dt/4, or with the new step~~ → **Stage 7**
+- ~~A larger N for the light disks (M ≤ 3e-4)~~ → **Stage 7**
+- ~~Decide the demo default: fading inflation~~ → **Stage 7** (Chris's call; its ejections
+      roughly halve once converged: 23 per run, not 36–42)
 *Deferred, not open:* fragmentation instead of perfect merging (Barnes et al. 2009); a 3D option
 (would test whether the 2D geometry drives the oligarch crowding, FINDINGS §5).
 **Done when:** the hot-disk ejection counts and first-ejection times agree within seed scatter
-between two step settings.
+between two step settings. ✓ Met: under the hybrid, f = 3 and both ramps hold every quantity from
+dt to dt/4, and f = 1 holds from dt/2 (ejections 59 → 69 → 70). The default disk's final e is
+resolved at 0.14 ± 0.02. Two residual flags (f = 10 final e, f = 3 t½ ±2%) have no trend.
+
+### Stage 7 — The rest of the sweeps under the hybrid  [ PLANNED ]
+(From Stage 6.)
+- [ ] Rerun the disk-mass sweep (batch_006) with `integrator: 'hybrid'`: the heavy disks (M ≥ 0.01)
+      are hot, so their removal counts likely carry leapfrog's dt = 0.01 over-ejection (FINDINGS §6
+      item 1)
+- [ ] A larger N for the light disks (M ≤ 3e-4), the closest thing here to a quiet oligarchy
+- [ ] Decide the demo default: fading inflation (f₀ = 30, q = 1) keeps the fast early growth and
+      restores scattering, at 23 ejections per run converged (Chris's call)
+- [ ] Hybrid speed: the changeover set holds ~half the bodies of the dense early disk; a cheaper
+      encounter integrator or a mass-dependent r_c for small bodies could make it a browser default
+**Done when:** every headline in FINDINGS rests on hybrid runs that converge across dt.

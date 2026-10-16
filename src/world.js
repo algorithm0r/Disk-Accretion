@@ -9,9 +9,12 @@
 // The star is a fixed unit mass at the origin. Its pull is central, so L_z about the origin
 // is conserved; momentum is not (the fixed star soaks it up).
 //
-// One step is leapfrog kick-drift-kick with fixed dt:
-//   v += a·dt/2;  x += v·dt;  [remove, collide+merge, compact];  a = a(x);  v += a·dt/2
-// Collisions run on the drifted positions with the half-kicked (= drift) velocities.
+// One step is kick-drift-kick with fixed dt, in one of two integrators (P.integrator):
+//   leapfrog: v += a·dt/2;  x += v·dt;  [remove, collide+merge, compact];  a = a(x);  v += a·dt/2
+//             (a = star + body-body; collisions on the drifted positions, drift velocities)
+//   hybrid:   the same shape, but a = body-body far part only and the drift is the exact Kepler
+//             orbit, with close encounters, contacts and star grazing resolved inside it
+//             (hybrid.js). The grid collision pass then only counts contacts the drift missed.
 
 // Body radius per unit m^(1/3), chosen so radiusInflation = 1 is Earth's mean density at
 // r = 1 AU: R_earth/AU = 4.26e-5 and (M_earth/M_sun)^(1/3) = 0.01443 → 2.95e-3.
@@ -92,9 +95,9 @@ var World = class World {
   // the engine entity hook: one sim step per update
   update() { this.step(); }
 
-  // Browser hook for an async force provider (worker pool or GPU, see pool.js / gpu.js): the
-  // provider replaces only the body-body term, everything else is the same step. Without a
-  // provider this is the synchronous step.
+  // Browser hook for an async force provider (worker pool or GPU, see pool.js): the provider
+  // replaces only the body-body term, everything else is the same step. Without a provider
+  // this is the synchronous step.
   async updateAsync() {
     const prov = this.provider;
     if (!prov || !this.P.selfGravity) { this.step(); return; }
@@ -102,7 +105,7 @@ var World = class World {
     const t2 = nowMs();
     this.gravityMode = prov.name;
     this.lastInteractions = await prov.selfAccel(this);
-    this.addStarAccel();
+    this.finishKickAccel();
     this.endStep(t2, nowMs());
   }
 
@@ -113,21 +116,41 @@ var World = class World {
     this.endStep(t2, nowMs());
   }
 
+  // P.integrator: 'leapfrog' (the fixed-step KDK of Stages 1–5) or 'hybrid' (hybrid.js:
+  // Kepler drift + MERCURIUS-style close encounters). Switching rebuilds what the kick needs.
+  get isHybrid() { return this.P.integrator === 'hybrid'; }
+  syncIntegrator() {
+    if (this.isHybrid && !this.hybrid) this.hybrid = new HybridIntegrator(this);
+    if (this.isHybrid) this.hybrid.recomputeRc();
+    this.computeForces();
+  }
+
   // kick (half) + drift, then removal, collisions and compaction
   beginStep() {
     const P = this.P, dt = P.dt, hdt = 0.5 * dt;
     const x = this.x, y = this.y, vx = this.vx, vy = this.vy, ax = this.ax, ay = this.ay;
     const t0 = nowMs();
     const n = this.n;
-    for (let i = 0; i < n; i++) {
-      const vxi = vx[i] + ax[i] * hdt, vyi = vy[i] + ay[i] * hdt;
-      vx[i] = vxi; vy[i] = vyi;
-      x[i] += vxi * dt; y[i] += vyi * dt;
+    if (this.isHybrid !== this._wasHybrid) this.syncIntegrator();
+    if (this.isHybrid) {
+      // far-part kick, then Kepler drift with the encounter groups resolved (contacts merge
+      // inside the drift); the grid pass afterwards only counts contacts the drift missed
+      for (let i = 0; i < n; i++) { vx[i] += ax[i] * hdt; vy[i] += ay[i] * hdt; }
+      this.hybrid.drift(dt);
+    } else {
+      for (let i = 0; i < n; i++) {
+        const vxi = vx[i] + ax[i] * hdt, vyi = vy[i] + ay[i] * hdt;
+        vx[i] = vxi; vy[i] = vyi;
+        x[i] += vxi * dt; y[i] += vyi * dt;
+      }
     }
     this.t += dt;
     const t1 = nowMs();
     this.removeEscapers();
-    if (P.collisions) this.grid.collide(this, dt);
+    if (P.collisions) {
+      const missed = this.grid.collide(this, dt);
+      if (this.isHybrid) { this.hybrid.stats.missed = missed; this.hybrid.total.missed += missed; }
+    }
     if (this.pendingDeaths) this.compact();
     this._t0 = t0; this._t1 = t1;
   }
@@ -146,7 +169,8 @@ var World = class World {
     T.step += a * ((t4 - t0) - T.step);
   }
 
-  // softened body-body gravity (tree or exact), then the exact star term
+  // The kick acceleration. Leapfrog: softened body-body gravity (tree or exact) + the star.
+  // Hybrid: body-body gravity minus the near part of close pairs (the star is in the drift).
   computeForces() {
     const P = this.P, n = this.n;
     const x = this.x, y = this.y, ax = this.ax, ay = this.ay;
@@ -165,7 +189,18 @@ var World = class World {
         ? this.tree.accelGrouped(x, y, this.m, n, eps2, ax, ay, P.bhGroup)
         : this.tree.accel(x, y, this.m, n, eps2, ax, ay);
     }
-    this.addStarAccel();
+    this.finishKickAccel();
+  }
+
+  finishKickAccel() {
+    this._wasHybrid = this.isHybrid;
+    if (this.isHybrid) {
+      if (!this.hybrid) { this.hybrid = new HybridIntegrator(this); }
+      if (this.P.selfGravity) this.hybrid.subtractNear();
+      else this.hybrid.findCandidates();
+    } else {
+      this.addStarAccel();
+    }
   }
 
   addStarAccel() {
@@ -207,28 +242,36 @@ var World = class World {
     const x = this.x, y = this.y, vx = this.vx, vy = this.vy, m = this.m, dead = this.dead;
     const rs2 = P.rStar * P.rStar, re2 = P.rEject * P.rEject;
     for (let i = 0; i < n; i++) {
+      if (dead[i]) continue;
       const r2 = x[i] * x[i] + y[i] * y[i];
-      if (r2 < rs2 || r2 > re2) {
-        const L = m[i] * (x[i] * vy[i] - y[i] * vx[i]) + this.spin[i];
-        if (r2 < rs2) { this.massAccreted += m[i]; this.LAccreted += L; this.nAccreted++; }
-        else { this.massEjected += m[i]; this.LEjected += L; this.nEjected++; }
-        dead[i] = 1;
-        this.pendingDeaths++;
-      }
+      if (r2 < rs2) this.removeBody(i, 'accrete');
+      else if (r2 > re2) this.removeBody(i, 'eject');
     }
+  }
+
+  // take body i out of the disk, banking its mass and L_z (orbital + spin)
+  removeBody(i, kind) {
+    if (this.dead[i]) return;
+    const m = this.m[i];
+    const L = m * (this.x[i] * this.vy[i] - this.y[i] * this.vx[i]) + this.spin[i];
+    if (kind === 'accrete') { this.massAccreted += m; this.LAccreted += L; this.nAccreted++; }
+    else { this.massEjected += m; this.LEjected += L; this.nEjected++; }
+    this.dead[i] = 1;
+    this.pendingDeaths++;
   }
 
   // pack the survivors into 0..n-1 (order-preserving)
   compact() {
     const n = this.n, dead = this.dead;
     const x = this.x, y = this.y, vx = this.vx, vy = this.vy, ax = this.ax, ay = this.ay;
-    const m = this.m, r = this.r, spin = this.spin;
+    const m = this.m, r = this.r, spin = this.spin, rc = this.rc;
     let w = 0;
     for (let i = 0; i < n; i++) {
       if (dead[i]) continue;
       if (w !== i) {
         x[w] = x[i]; y[w] = y[i]; vx[w] = vx[i]; vy[w] = vy[i]; ax[w] = ax[i]; ay[w] = ay[i];
         m[w] = m[i]; r[w] = r[i]; spin[w] = spin[i];
+        if (rc) rc[w] = rc[i];
       }
       dead[w] = 0;
       w++;
@@ -240,6 +283,7 @@ var World = class World {
   // re-derive every radius (the inflation slider changes them live)
   updateRadii() {
     for (let i = 0; i < this.n; i++) this.r[i] = this.radiusOf(this.m[i]);
+    if (this.hybrid) this.hybrid.recomputeRc();   // r_c includes 2R
   }
 
   // ─── diagnostics ────────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ import { Worker } from 'worker_threads';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const indirectEval = eval;
-for (const f of ['util.js', 'params.js', 'gravity.js', 'collide.js', 'world.js', 'pool.js']) {
+for (const f of ['util.js', 'params.js', 'gravity.js', 'collide.js', 'hybrid.js', 'world.js', 'pool.js']) {
   indirectEval(readFileSync(path.join(__dirname, 'src', f), 'utf8').replace(/^\s*(['"])use strict\1;?/, ''));
 }
 process.title = 'Disk Accretion bench-pool';

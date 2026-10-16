@@ -2,7 +2,7 @@
 // per config × seed, conventions §4) and writes each packet to MongoDB (collection batch_NNN
 // via the research Server) and to analysis/runs/<batch>/<run>.json.
 //   node sweep.mjs <plan>[+<plan>...] [--jobs 16] [--dry]   (plans: base mass inflation toomre base3k mass3k all;
-//   Stage 5: infl4 infl005 infl0025 base005 base0025 dtconv)
+//   Stage 5: infl4 infl005 infl0025 base005 base0025 dtconv; Stage 6: hyb01 hyb005 hyb0025 hybconv hybmore)
 //
 // Run-name grammar: <exp>_M<diskMass>_I<inflation>[r<ramp q>]_N<N>_s<seed>
 //   batch_001  base       default disk, 4 seeds, 1000 orbits: growth modes + final spacing
@@ -18,6 +18,12 @@
 //   batch_009  infl0025   batch_003's configs, 4 seeds, dt = 0.0025
 //   batch_010  base005    batch_005's config, 8 seeds, 3000 orbits, dt = 0.005
 //   batch_011  base0025   batch_005's config, 8 seeds, 3000 orbits, dt = 0.0025
+// Stage 6 (integrator: 'hybrid'; run names gain _hyb):
+//   batch_012  hyb01      f = 1, 3, 10 and both fading ramps (4 seeds) + the default disk (8 seeds), dt = 0.01
+//   batch_013  hyb005     the same at dt = 0.005
+//   batch_014  hyb0025    the same at dt = 0.0025
+//   batch_015/016/017  hyb01b/hyb005b/hyb0025b (= hybmore): swept contacts; f = 1, 3 seeds 1–8
+//              (supersede 012–014 for those two), f = 10 and both ramps seeds 5–8
 import { spawn } from 'child_process';
 import { mkdirSync, createWriteStream } from 'fs';
 import path from 'path';
@@ -88,6 +94,29 @@ PLANS.infl0025 = () => inflAt('batch_009', 0.0025, [1, 2, 3, 4]);
 PLANS.base005 = () => baseAt('batch_010', 0.005);
 PLANS.base0025 = () => baseAt('batch_011', 0.0025);
 PLANS.dtconv = () => [...PLANS.infl4(), ...PLANS.infl005(), ...PLANS.infl0025(), ...PLANS.base005(), ...PLANS.base0025()];
+// Stage 6: the hybrid integrator (src/hybrid.js) on the configs Stage 5 could not converge (f = 1, 3
+// and both fading ramps) plus f = 10 as a control, 4 seeds, and the default disk, 8 seeds; one batch
+// per dt. Run names gain _hyb. The hybrid costs ~2.2× leapfrog per step (DEVLOG), so cost ×2.5.
+const hyb = (c) => Object.assign({}, c, { name: c.name.replace(/_dt[0-9p]+$/, '') + '_hyb' + (c.set.dt ? '_dt' + fmt(c.set.dt) : ''),
+  set: Object.assign({}, c.set, { integrator: 'hybrid' }), cost: (c.cost || 150) * 2.5, maxMin: 900 });
+const HOT = (c) => [1, 3, 10].includes(c.set.radiusInflation) && !c.set.inflationRamp || c.set.inflationRamp;
+const hybAt = (batch, dt) => [
+  ...inflAt(batch, dt, [1, 2, 3, 4]).filter(HOT).map(hyb),
+  ...PLANS.base3k().map((c) => hyb(dt === 0.01 ? Object.assign({}, c, { batch, cost: 150 }) : atDt(c, batch, dt, c.seeds))),
+];
+PLANS.hyb01 = () => hybAt('batch_012', 0.01);
+PLANS.hyb005 = () => hybAt('batch_013', 0.005);
+PLANS.hyb0025 = () => hybAt('batch_014', 0.0025);
+PLANS.hybconv = () => [...PLANS.hyb01(), ...PLANS.hyb005(), ...PLANS.hyb0025()];
+// Stage 6 follow-up: contact is swept over each encounter substep (hybrid.js sweptContact). Reruns
+// f = 1 and f = 3 (the configs with > 0.1% contacts left to the end-of-step grid before it) at seeds
+// 1–8, superseding them in batch_012–014, and adds seeds 5–8 to f = 10 and both ramps.
+const hybMore = (batch, dt) => inflAt(batch, dt, [1, 2, 3, 4, 5, 6, 7, 8]).filter(HOT).map(hyb)
+  .filter((c) => (!c.set.inflationRamp && c.set.radiusInflation <= 3) || +c.seeds >= 5);
+PLANS.hyb01b = () => hybMore('batch_015', 0.01);
+PLANS.hyb005b = () => hybMore('batch_016', 0.005);
+PLANS.hyb0025b = () => hybMore('batch_017', 0.0025);
+PLANS.hybmore = () => [...PLANS.hyb01b(), ...PLANS.hyb005b(), ...PLANS.hyb0025b()];
 PLANS.all = () => [...PLANS.base(), ...PLANS.mass(), ...PLANS.inflation(), ...PLANS.toomre()];
 
 const plan = which.split('+').flatMap((w) => PLANS[w]());

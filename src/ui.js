@@ -89,6 +89,7 @@ var READOUT_ROWS = [
   ['Mass error', (s) => s.massError.toExponential(1)],
   ['Accreted / ejected', (s) => fmtNum(s.massAccreted / M_EARTH) + ' / ' + fmtNum(s.massEjected / M_EARTH) + ' M⊕'],
   ['Time', (s) => s.orbits.toFixed(1) + ' orbits @ r=1'],
+  ['Integrator', () => (world.isHybrid ? 'hybrid (' + world.hybrid.stats.inGroups + ' in encounters, ' + world.hybrid.total.contacts + ' contacts)' : 'leapfrog')],
   ['Gravity', (s) => s.gravityMode + (PARAMETERS.gravity === 'brute' && s.gravityMode === 'bh' ? ' (brute capped at ' + PARAMETERS.bruteMaxN + ')' : '')],
   ['ms / step', (s) => s.msStep.toFixed(2) + '  (grav ' + s.msGravity.toFixed(2) + ', coll ' + s.msCollide.toFixed(2) + ')'],
   ['ms / draw', () => (observer ? observer.drawMs.toFixed(2) : '–')],

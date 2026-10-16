@@ -6,7 +6,10 @@ Vanilla JS + Canvas, no build step, scaffolded from the shared engine v2. Gravit
 Barnes-Hut quadtree (grouped walk + quadrupoles) with an exact O(N²) reference; collisions are
 a spatial hash with perfect merging. On an i7-12700K it runs ~11.5k bodies at 30 fps with 4
 steps per frame, or ~40k at 1 step per frame; the WebGPU backend (RTX 3070 Ti) ~27k / ~88k
-(see DEVLOG for the benchmarks). Stage 3's science results, and Stage 5's dt-convergence check of them, are in `analysis/FINDINGS.md`.
+(see DEVLOG for the benchmarks). Two integrators: fixed-step leapfrog (the default, fast), and a
+hybrid symplectic integrator (exact Kepler orbits + resolved close encounters, MERCURIUS-style)
+for science runs. The science results (Stage 3), their dt-convergence checks (Stages 5–6) and the
+integrator comparison are in `analysis/FINDINGS.md`.
 
 **Live:** https://algorithm0r.github.io/Disk-Accretion/ · **Repo:** https://github.com/algorithm0r/Disk-Accretion
 
@@ -31,7 +34,7 @@ steps per frame, or ~40k at 1 step per frame; the WebGPU backend (RTX 3070 Ti) ~
   worker pool / WebGPU force providers) + `ui.js`/`main.js` (browser-only, all DOM).
 - `runner.mjs` / `sweep.mjs` / `smoketest.mjs` / `bench.mjs` / `bench-pool.mjs` — headless entry points.
 - `analysis/` — `stage3.py`, `figures/`, `tables.md`, `FINDINGS.md` (run packets in `analysis/runs/`
-  are git-ignored; the canonical copies are in MongoDB `diskAccretionDB`, batch_001–011).
+  are git-ignored; the canonical copies are in MongoDB `diskAccretionDB`, batch_001–014).
 - `DEVPLAN.md` / `DEVLOG.md` — the plan (forward) and the log (backward, append-only).
 
 See `~/.claude/conventions.md` for the shared standards this follows.
