@@ -9,10 +9,17 @@
   spin bookkeeping (`collide.js`), accretion/ejection banking, ImageData renderer with mass
   colours and Hill rings (`observer.js`), live readouts + controls (`ui.js`), a 16-check
   invariant smoketest and `bench.mjs`. Demo "drifters" model and `agent.js` removed.
+- **Stage 2 (2026-10-15):** async force providers in `src/pool.js` (browser only): a Web Worker
+  pool over the grouped walk and WebGPU all-pairs gravity; `World.updateAsync` + an async engine
+  loop; "Force backend" control; `bench-pool.mjs`. GPU path: ~2.3× the CPU's max N at 30 fps.
+- **Stage 3 (2026-10-15):** orbit-sampled `runner.mjs` (mass spectra, big-body a/e, snapshots;
+  MongoDB over socket + local JSON), `sweep.mjs` (parallel batches), `inflationRamp`,
+  `analysis/stage3.py` (9 figures, tables) and `analysis/FINDINGS.md`.
 
 ## Not yet built
-- Web Worker / GPU (Stage 2); quantitative regime checks (Stage 3); adaptive steps for
-  close encounters (see the integrator note below).
+- 5× scale-up: GPU collisions, multi-step GPU integration, SharedArrayBuffer (Stage 4).
+- dt-converged error bars on the Stage 3 numbers; adaptive steps for close encounters (Stage 5;
+  see the integrator note below).
 
 ## Origin
 Came out of a PA conversation with Chris (2026-10-15): "a 2d rotating disk of particles that
@@ -130,22 +137,74 @@ browser, visibly shows bodies sweeping up their lanes into a few large ones, and
 asserts the conservation invariants. ✓ Met: 10k bodies at 34 fps (4 steps/frame) in Chrome,
 10k → 40 bodies with 96% of the mass in 9 oligarchs by 150 orbits, smoke 16/16 PASS.
 
-### Stage 2 — Scale up  [ PLANNED ]
+### Stage 2 — Scale up  [ DONE ] (closed 2026-10-15, target half met)
 *Starting point (from Stage 1's profile):* the CPU path is bound by sqrt/div throughput in the
 force sum (~2.6 ns/interaction), not by traversal or memory. So the levers are parallelism (this
 machine has 20 threads, and the grouped walk is embarrassingly parallel over groups, so a worker
 pool on a SharedArrayBuffer should scale near-linearly) and the GPU's fast f32 rsqrt. Collisions
 are ~15% of a step and would need their own parallel pass.
-- [ ] Move the sim to a Web Worker (SharedArrayBuffer or transferable snapshots to render)
-- [ ] Split the grouped walk across a worker pool (groups are independent); needs COOP/COEP
-      headers for SharedArrayBuffer, so file:// stops being enough
-- [ ] GPU gravity (WebGPU compute, or WebGL2 fallback) for the particle-particle term
-- [ ] Re-benchmark; pick the default path
-**Done when:** max N at ~30 fps is at least ~5× the Stage 1 figure, logged.
+- ~~Move the sim to a Web Worker (SharedArrayBuffer or transferable snapshots to render)~~ → not
+  needed: the providers below take the force term off the main thread and the UI stays responsive.
+  Moving the whole sim is folded into **Stage 4**.
+- [x] Split the grouped walk across a worker pool (`GravityPool`, `src/pool.js`): blob-URL Workers
+      built from the same `BarnesHut` source, so it works from file://. No SharedArrayBuffer (no
+      COOP/COEP headers on file:// or the Static Server), so each step posts one packed copy of
+      (x, y, m) and every worker rebuilds the tree. Measured (Node `worker_threads`, `bench-pool.mjs`,
+      identical worker code): best at **4 workers, ~1.9×** (10k: 8.6 → 4.6 ms/step; 40k: 30.6 →
+      17.8; 100k: 89 → 52); 8–16 workers are slower. The ceiling is the replicated build plus the
+      copies, which only SharedArrayBuffer removes.
+- [x] GPU gravity (`GpuGravity`, WebGPU compute, f32 all-pairs, 256-body shared-memory tiles; the
+      star term and integration stay f64 on the CPU). Force time on the RTX 3070 Ti: 3.9 ms @10k,
+      7.2 @40k, 18.9 @100k (~5e11 interactions/s, a ~3–4 ms read-back floor per step). Median force
+      error vs f64 brute 4e-6, so it is more accurate than the tree; L_z drift 1.4e-9 over 4 orbits
+      at 10k (tree 3.3e-7).
+- [x] Re-benchmark; pick the default path. In-page, full steps (collisions included), max N at 30
+      fps: **GPU ~27k at 4 steps/frame, ~88k at 1** (vs 11.5k / 40k on the CPU tree): **2.3× / 2.2×**.
+      Default stays `cpu` (works everywhere; headless); the panel's "Force backend" picks `workers`
+      or `gpu`.
+**Done when:** max N at ~30 fps is at least ~5× the Stage 1 figure, logged. **Half met:** the GPU
+path is in and logged, but at 2.2–2.4×, not 5×. What now limits it: collision detection, still
+serial on the CPU (half the step at ≥80k), and the per-step GPU round trip. Both move to Stage 4.
 
-### Stage 3 — Does it reproduce the known regimes?  [ PLANNED ]
-- [ ] Mass-distribution plot over time (log-log cumulative), to look for the runaway tail
-- [ ] Spacing of final protoplanets in mutual Hill radii, vs the ~5–10 expectation
-- [ ] Sweep disk mass: planetesimal regime vs Toomre-unstable clumping
-- [ ] Headless batch runs via `runner.mjs` → MongoDB
+### Stage 3 — Does it reproduce the known regimes?  [ DONE ] (closed 2026-10-15)
+Full write-up: `analysis/FINDINGS.md` (each claim → figure/table → regeneration command).
+- [x] Mass-distribution plot over time (log-log cumulative), to look for the runaway tail
+      (fig1, fig2: M₁/⟨m⟩ peaks at 31–61 around 13–40 orbits; tail index q passes 2.35 at 10 orbits)
+- [x] Spacing of final protoplanets in mutual Hill radii, vs the ~5–10 expectation (fig3, fig8:
+      median 7.6 R_H at 3000 orbits, 8 seeds; every disk mass plateaus at 5–8.3)
+- [x] Sweep disk mass: planetesimal regime vs Toomre-unstable clumping (fig4, fig4b, fig5:
+      t_half ∝ M^−0.75; with collisions off, Q < 1 disks reach 2.6–3.1× Poisson clumping as wakes)
+- [x] **Radius-inflation sweep** (added 2026-10-15, from the PA conversation): the 150-orbit
+      default run had zero accretion and zero ejection. Account to test: inflation f lowers the
+      surface escape speed by √f and the Safronov number Θ = v_esc²/2v_K² by f, so close passes
+      merge instead of scattering. Lower the inflation, and ramp it down as bodies grow
+      (`inflationRamp`), and check whether ejections appear and how growth time scales with f.
+      (fig6, fig7: holds in direction, ejections 0 → 61–90 as f goes 100 → 3, t ∝ f^−0.88; two
+      corrections: f = 30 does eject, first at 160–840 orbits; Θ of the largest body alone does
+      not predict the count.)
+- [x] Headless batch runs via `runner.mjs` → MongoDB (socket transport through the research Server;
+      `npm install` for socket.io-client). batch_001–006, 58 runs, ~15 min wall on 14–16 processes.
 **Done when:** runaway → oligarchic → isolated spacing is shown quantitatively, not just visually.
+✓ Met, with a finding: runaway and oligarchic growth show in the mass statistics, and the end
+state sits at 5–10 mutual Hill radii, but it gets there through a giant-impact phase. During the
+oligarchic phase the big bodies crowd at ≪ 1 R_H rather than sitting isolated.
+
+### Stage 4 — Past the 5× line  [ PLANNED ]
+(From Stage 2.)
+- [ ] Collision search off the main thread (GPU spatial hash, or the worker pool once it has a SAB)
+- [ ] Whole leapfrog on the GPU for k steps per read-back (removes the ~3–4 ms floor per step)
+- [ ] COOP/COEP-capable serving (a per-site header in the Static Server, or a tiny dedicated
+      server) → SharedArrayBuffer pool, and the sim itself in a Worker
+**Done when:** max N at ~30 fps ≥ 5× the Stage 1 figure (≥ ~57k at 4 steps/frame).
+
+### Stage 5 — Are the Stage 3 numbers robust?  [ PLANNED ]
+(From Stage 3.)
+- [ ] dt-convergence of the late-phase numbers (ejection counts, final e and spacing) at dt/2, dt/4,
+      since closest encounters are under-resolved at dt = 0.01
+- [ ] More seeds per sweep point (2 now) and a larger N for the light disks
+- [ ] Why the oligarchs crowd at ≪ 1 R_H in 2D: run the same disk with less inflation / the fading
+      ramp and see whether feeding-zone spacing appears before the giant-impact phase
+- [ ] Decide the demo default: fading inflation (f₀ = 30, q = 1) keeps fast early growth and
+      restores scattering (Chris's call)
+*Deferred, not open:* fragmentation instead of perfect merging (Barnes et al. 2009); a 3D option.
+**Done when:** the Stage 3 headline numbers are quoted with dt-converged error bars.

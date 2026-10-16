@@ -50,7 +50,15 @@ var World = class World {
     this.L0 = this.totalLz();
   }
 
-  radiusOf(mass) { return this.P.radiusInflation * K_RADIUS * Math.cbrt(mass); }
+  // Radius = inflation × K·m^(1/3). With inflationRamp q > 0 the inflation fades as a body
+  // grows, f(m) = 1 + (f₀ − 1)(m₀/m)^q: small bodies stay puffy (fast, watchable sweeping) while
+  // big ones approach true density, so their surface escape speed (and Safronov number) is
+  // realistic. q = 0 is plain constant inflation.
+  radiusOf(mass) {
+    const P = this.P, q = P.inflationRamp || 0;
+    const f = q > 0 ? 1 + (P.radiusInflation - 1) * Math.pow(this.m0 / mass, q) : P.radiusInflation;
+    return f * K_RADIUS * Math.cbrt(mass);
+  }
 
   // Equal-mass bodies on circular orbits plus a small random velocity. Σ ∝ r^-p means
   // dN/dr ∝ r^(1-p); sampled by inverting its CDF. The circular speed counts the star plus
@@ -84,13 +92,33 @@ var World = class World {
   // the engine entity hook: one sim step per update
   update() { this.step(); }
 
+  // Browser hook for an async force provider (worker pool or GPU, see pool.js / gpu.js): the
+  // provider replaces only the body-body term, everything else is the same step. Without a
+  // provider this is the synchronous step.
+  async updateAsync() {
+    const prov = this.provider;
+    if (!prov || !this.P.selfGravity) { this.step(); return; }
+    this.beginStep();
+    const t2 = nowMs();
+    this.gravityMode = prov.name;
+    this.lastInteractions = await prov.selfAccel(this);
+    this.addStarAccel();
+    this.endStep(t2, nowMs());
+  }
+
   step() {
+    this.beginStep();
+    const t2 = nowMs();
+    this.computeForces();
+    this.endStep(t2, nowMs());
+  }
+
+  // kick (half) + drift, then removal, collisions and compaction
+  beginStep() {
     const P = this.P, dt = P.dt, hdt = 0.5 * dt;
     const x = this.x, y = this.y, vx = this.vx, vy = this.vy, ax = this.ax, ay = this.ay;
     const t0 = nowMs();
-
-    // kick (half) + drift
-    let n = this.n;
+    const n = this.n;
     for (let i = 0; i < n; i++) {
       const vxi = vx[i] + ax[i] * hdt, vyi = vy[i] + ay[i] * hdt;
       vx[i] = vxi; vy[i] = vyi;
@@ -98,20 +126,19 @@ var World = class World {
     }
     this.t += dt;
     const t1 = nowMs();
-
-    // removal, collisions, compaction
     this.removeEscapers();
     if (P.collisions) this.grid.collide(this, dt);
     if (this.pendingDeaths) this.compact();
-    const t2 = nowMs();
+    this._t0 = t0; this._t1 = t1;
+  }
 
-    // forces at the new positions, then the closing half kick
-    this.computeForces();
-    const t3 = nowMs();
-    n = this.n;
+  // the closing half kick (forces at the new positions are in ax/ay), plus timing
+  endStep(t2, t3) {
+    const hdt = 0.5 * this.P.dt, n = this.n;
+    const vx = this.vx, vy = this.vy, ax = this.ax, ay = this.ay;
     for (let i = 0; i < n; i++) { vx[i] += ax[i] * hdt; vy[i] += ay[i] * hdt; }
     this.steps++;
-
+    const t0 = this._t0, t1 = this._t1;
     const t4 = nowMs(), T = this.timing, a = this.steps < 5 ? 1 : 0.1;
     T.drift += a * ((t1 - t0) + (t4 - t3) - T.drift);
     T.collide += a * ((t2 - t1) - T.collide);
@@ -138,6 +165,11 @@ var World = class World {
         ? this.tree.accelGrouped(x, y, this.m, n, eps2, ax, ay, P.bhGroup)
         : this.tree.accel(x, y, this.m, n, eps2, ax, ay);
     }
+    this.addStarAccel();
+  }
+
+  addStarAccel() {
+    const x = this.x, y = this.y, ax = this.ax, ay = this.ay, n = this.n;
     for (let i = 0; i < n; i++) {
       const xi = x[i], yi = y[i];
       const r2 = xi * xi + yi * yi;

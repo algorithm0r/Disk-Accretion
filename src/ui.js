@@ -30,6 +30,7 @@ function buildControls() {
     const apply = () => {
       if (spec.resets) reset();
       else if (spec.live === 'radii' && world) world.updateRadii();
+      else if (spec.live === 'backend') setBackend(PARAMETERS[spec.key]);
     };
 
     if (spec.options) {
@@ -82,7 +83,7 @@ var READOUT_ROWS = [
   ['Mass error', (s) => s.massError.toExponential(1)],
   ['Accreted / ejected', (s) => fmtNum(s.massAccreted / M_EARTH) + ' / ' + fmtNum(s.massEjected / M_EARTH) + ' M⊕'],
   ['Time', (s) => s.orbits.toFixed(1) + ' orbits @ r=1'],
-  ['Gravity', (s) => s.gravityMode + (s.gravityMode !== PARAMETERS.gravity ? ' (brute capped at ' + PARAMETERS.bruteMaxN + ')' : '')],
+  ['Gravity', (s) => s.gravityMode + (PARAMETERS.gravity === 'brute' && s.gravityMode === 'bh' ? ' (brute capped at ' + PARAMETERS.bruteMaxN + ')' : '')],
   ['ms / step', (s) => s.msStep.toFixed(2) + '  (grav ' + s.msGravity.toFixed(2) + ', coll ' + s.msCollide.toFixed(2) + ')'],
   ['ms / draw', () => (observer ? observer.drawMs.toFixed(2) : '–')],
   ['fps', () => gameEngine.fps.toFixed(1) + (gameEngine.paused ? '  (paused)' : '')],

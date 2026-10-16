@@ -8,3 +8,8 @@ Thumbs.db
 data/
 # large regenerable exports (regenerate with: node runner.mjs ...)
 *.csv
+
+# Stage 3 run packets + logs (regenerable: node sweep.mjs ...; canonical copy in MongoDB batch_NNN)
+analysis/runs/
+analysis/logs/
+analysis/*.out

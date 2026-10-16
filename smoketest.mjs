@@ -151,5 +151,25 @@ check('bh: N non-increasing, bodies grow', bh.monotone && bh.s.n < 3000 && bh.s.
   }
 }
 
+// ─── 6. the worker pool's split: slices of the grouped walk tile it exactly ───────────────
+// (the browser pool runs this same code in Web Workers, one slice each; see src/pool.js)
+{
+  const w = new World(params({ N: 3000 }));
+  const n = w.n, eps2 = w.P.softening ** 2, g = BASE.bhGroup;
+  const tree = new BarnesHut(n);
+  const fx = new Float64Array(n), fy = new Float64Array(n), sx = new Float64Array(n).fill(NaN), sy = new Float64Array(n).fill(NaN);
+  tree.build(w.x, w.y, w.m, n, BASE.theta);
+  tree.accelGrouped(w.x, w.y, w.m, n, eps2, fx, fy, g);
+  let covered = 0;
+  const W = 7;
+  for (let k = 0; k < W; k++) {
+    tree.accelGrouped(w.x, w.y, w.m, n, eps2, sx, sy, g, Math.floor(n * k / W), Math.floor(n * (k + 1) / W));
+    covered += Math.max(0, tree.covHi - tree.covLo);
+  }
+  let same = covered === n;
+  for (let i = 0; i < n && same; i++) same = sx[i] === fx[i] && sy[i] === fy[i];
+  check('worker-pool split: 7 slices reproduce the serial walk bit-for-bit', same, 'covered ' + covered + '/' + n);
+}
+
 console.log(failures ? 'smoke: FAIL (' + failures + ')' : 'smoke: PASS');
 process.exit(failures ? 1 : 0);

@@ -17,6 +17,7 @@ var PARAMETERS = {
 
   // --- bodies ---
   radiusInflation: 30,  // body radius = inflation × (Earth density at r = 1); sets growth speed
+  inflationRamp: 0,     // q > 0: inflation fades with mass, 1 + (f−1)(m₀/m)^q (0 = constant)
 
   // --- gravity ---
   gravity: 'bh',        // 'bh' (Barnes-Hut quadtree) | 'brute' (exact O(N²), the reference)
@@ -31,6 +32,10 @@ var PARAMETERS = {
   collisions: true,     // perfect merging on contact
   rStar: 0.1,           // bodies inside this radius are accreted by the star
   rEject: 10,           // bodies beyond this radius are counted as ejected
+
+  // --- browser force backend (headless always runs 'cpu') ---
+  backend: 'cpu',       // 'cpu' (main thread) | 'workers' (pool over the grouped walk) | 'gpu' (WebGPU all-pairs)
+  workers: 4,           // pool size for the 'workers' backend (4 is the measured optimum; see DEVLOG)
 
   // --- engine ---
   stepsPerFrame: 4,     // sim steps per rendered frame
@@ -62,7 +67,8 @@ var PARAM_SCHEMA = [
   { key: 'stepsPerFrame', label: 'Steps / frame', min: 1, max: 40, step: 1 },
   { key: 'theta', label: 'θ (Barnes-Hut)', min: 0, max: 1.5, step: 0.05 },
   { key: 'dt', label: 'dt', min: 0.001, max: 0.03, step: 0.001 },
-  { key: 'gravity', label: 'Gravity', options: ['bh', 'brute'] },
+  { key: 'gravity', label: 'Gravity (cpu)', options: ['bh', 'brute'] },
+  { key: 'backend', label: 'Force backend', options: ['cpu', 'workers', 'gpu'], live: 'backend' },
   { key: 'selfGravity', label: 'Self-gravity', type: 'bool' },
   { key: 'collisions', label: 'Collisions', type: 'bool' },
 ];

@@ -30,10 +30,11 @@ var GameEngine = class GameEngine {
   start() {
     this.running = true;
     this._fpsT0 = nowMs();
-    const loop = () => {
+    // async so an entity can await an off-thread force provider (worker pool / GPU)
+    const loop = async () => {
       if (!this.running) return;
       const t0 = nowMs();
-      if (!this.paused) for (let i = 0; i < PARAMETERS.stepsPerFrame; i++) this.update();
+      if (!this.paused) for (let i = 0; i < PARAMETERS.stepsPerFrame; i++) await this.updateAsync();
       this.draw();
       const t1 = nowMs();
       this.frameMs += 0.1 * ((t1 - t0) - this.frameMs);
@@ -52,6 +53,16 @@ var GameEngine = class GameEngine {
   update() {
     this.tick++;
     for (const e of this.entities) if (e.update) e.update(this);
+    this.entities = this.entities.filter((e) => !e.removeFromWorld);
+  }
+
+  // browser step: entities with updateAsync are awaited (the world, when a provider is set)
+  async updateAsync() {
+    this.tick++;
+    for (const e of this.entities) {
+      if (e.updateAsync) await e.updateAsync(this);
+      else if (e.update) e.update(this);
+    }
     this.entities = this.entities.filter((e) => !e.removeFromWorld);
   }
 

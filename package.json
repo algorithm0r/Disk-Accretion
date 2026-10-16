@@ -1,0 +1,9 @@
+{
+  "name": "disk-accretion-sim",
+  "private": true,
+  "description": "Disk Accretion — headless runner deps (socket.io-client for the standard DB client over the research Server)",
+  "type": "commonjs",
+  "dependencies": {
+    "socket.io-client": "^4.7.5"
+  }
+}

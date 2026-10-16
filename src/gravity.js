@@ -215,7 +215,13 @@ var BarnesHut = class BarnesHut {
   // multiplies — and it is what lets θ rise for the same accuracy. For a node at offset
   // X = (field point − centre of mass), with r² = |X|² + ε²:
   //   a = −M X / r³ + (Q·X) / r⁵ − (5/2) (Xᵀ Q X) X / r⁷
-  accelGrouped(x, y, m, n, eps2, ax, ay, groupSize) {
+  //
+  // Optional [sLo, sHi): only groups whose first sorted body falls in that range are summed (a
+  // worker's share). Groups tile the sorted order contiguously, so the bodies covered are one
+  // run, reported back in this.covLo .. this.covHi.
+  accelGrouped(x, y, m, n, eps2, ax, ay, groupSize, sLo, sHi) {
+    if (sLo === undefined) { sLo = 0; sHi = n; }
+    let covLo = n, covHi = 0;
     if (eps2 <= 0) eps2 = 1e-300;
     const child = this.child, start = this.start, nb = this.nb;
     const mass = this.mass, mx = this.mx, my = this.my, crit2 = this.crit2;
@@ -235,6 +241,9 @@ var BarnesHut = class BarnesHut {
       }
       // group g: bodies s0 .. s1-1 in sorted order; bounding box of the actual bodies
       const s0 = start[g], s1 = s0 + nb[g];
+      if (s0 < sLo || s0 >= sHi) continue;
+      if (s0 < covLo) covLo = s0;
+      if (s1 > covHi) covHi = s1;
       let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
       for (let s = s0; s < s1; s++) {
         const xs = sx[s], ys = sy[s];
@@ -302,6 +311,7 @@ var BarnesHut = class BarnesHut {
       }
       inter += (nn + nbl) * (s1 - s0);
     }
+    this.covLo = covLo; this.covHi = covHi;
     return inter;
   }
 
