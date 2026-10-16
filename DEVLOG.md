@@ -1,6 +1,17 @@
 # Disk Accretion — DEVLOG
 Newest entry on top. **Append only — never edit past entries.**
 
+## 2026-10-15 — published
+
+**Done:** Published from the PA session on Chris's direct go-ahead: public repo
+https://github.com/algorithm0r/Disk-Accretion, GitHub Pages from `main` at
+https://algorithm0r.github.io/Disk-Accretion/ (live page verified running there), About set.
+README links came in 099f55f. This supersedes the "not published" State line of the Pages-prep
+entry below.
+**Changed:** STATUS (Branches now names the remote; the "publish pending" Open item is gone).
+**State:** `main` level with `origin/main` at 099f55f before this commit; smoke unchanged.
+**Next:** Stage 5 (dt-convergence) as before. Pushes to `main` now go live on Pages.
+
 ## 2026-10-15 — Pages prep (publish pending)
 
 **Done:** Prepared for publishing as public `algorithm0r/Disk-Accretion` with GitHub Pages from
