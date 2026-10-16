@@ -1,6 +1,75 @@
 # Disk Accretion — DEVLOG
 Newest entry on top. **Append only — never edit past entries.**
 
+## 2026-10-15 — Stages 2 + 3: worker/GPU backends, regime batches, the inflation test
+
+**Done:** Stage 2 (closed, target half met) and Stage 3 (closed), at Chris's "try to get through
+stage 3".
+*Stage 2.* Split `World.step` into begin / body-body force / end so an async provider can supply
+the force (`updateAsync`, async engine loop, "Force backend" control). Two providers in
+`src/pool.js` (browser only):
+- `GravityPool`: blob-URL Workers built from the same `BarnesHut` source, each summing a slice of
+  the groups. Bit-identical to the serial walk (smoke check 6).
+- `GpuGravity`: WebGPU all-pairs in f32. Median force error vs f64 brute force 4e-6; L_z drift 1.4e-9
+  over 4 orbits at 10k.
+- No SharedArrayBuffer: the page isn't cross-origin isolated (needs COOP/COEP headers), so the pool
+  copies bodies to each worker and every worker rebuilds the tree.
+
+Benchmarks:
+| path | 4 steps/frame | 1 step/frame | notes |
+|---|---|---|---|
+| CPU tree (Stage 1) | ~11.5k | ~40k | |
+| worker pool, 4 workers | ~1.9× per step | | Node `bench-pool.mjs`, same worker code: 10k 8.6 → 4.6 ms, 40k 30.6 → 17.8, 100k 89 → 52; 8–16 workers slower |
+| **GPU (RTX 3070 Ti)** | **~27k** (20k: 42.4 fps, 30k: 26.4) | **~88k** (80k: 34.8, 100k: 26.4) | in-page, full steps incl. collisions |
+GPU force time alone: 3.9 ms at 10k, 7.2 at 40k, 18.9 at 100k (~5e11 interactions/s). So 2.2–2.4×
+the CPU, not the 5× target. Serial CPU collisions (half the step at ≥ 80k) and the ~3–4 ms GPU
+round trip per step now limit it → Stage 4. In-page CPU timings were throttled ~3× while the pane
+was hidden (tree at 20k: 40 ms in-page vs 13.7 in Node), hence the pool numbers come from Node.
+*Stage 3.* `runner.mjs` rewritten:
+- orbit-based sampling (full mass spectrum, bound big-body (k, a, e), unbound and ejected counts,
+  position snapshots)
+- packets to MongoDB over socket via the standard client (`npm install` socket.io-client; Server
+  round-trip verified) plus local JSON in `analysis/runs/`
+
+Also added `sweep.mjs` (parallel batches, run-name grammar in its header), `inflationRamp`
+(inflation fading with mass, 1 + (f−1)(m₀/m)^q) and `analysis/stage3.py` (9 figures + `tables.md`).
+58 runs in batch_001–006, ~15 min wall at 14–16 processes. The write-up is `analysis/FINDINGS.md`.
+
+Results:
+- **Runaway:** M₁/⟨m⟩ peaks at 31–61 around 13–40 orbits (8 seeds). The tail index q passes
+  2.35 ± 0.08 at 10 orbits.
+- **Oligarchic:** M₁/M₁₀ ≈ 1.5–6 for 3–40 orbits, while the leaders pull 10²–10³× away from the median.
+- **Spacing:** median Δa/R_H,mutual climbs 0.7 → 3.4 → 6.5 → 7.4 → **7.6** at 10/100/300/1000/3000
+  orbits (IQR 6.8–8.1, e ≈ 0.11). Every disk mass plateaus at 5–8.3. *Finding:* the 5–10 band is
+  reached through a giant-impact phase; during the oligarchic phase big bodies crowd at ≪ 1 R_H.
+- **Disk mass:** t(N halves) ∝ M^−0.75 (40 → 0.25 orbits, M 1e-4 → 0.1). With collisions off,
+  Q < 1 disks form sheared wakes: clumping 2.6–3.1× Poisson against 1.2 at Q = 9, transient over
+  2–3 orbits.
+- **Inflation account (holds in direction, two corrections):** ejections per run go 0 (f = 100) →
+  1–5 (30) → 15–20 (10) → 61–90 (3). Bodies reach the star at f ≤ 3. Big-body e rises 0.06 → 0.5,
+  and growth time goes as t ∝ f^−0.88.
+  - Correction 1: f = 30 does eject, just late; all 8 seeds make their first ejection at 160–790
+    orbits, so the 150-orbit zero was timing.
+  - Correction 2: Θ of the largest body alone doesn't order the counts. f = 1 ejects fewer than
+    f = 3 (growth too slow), and fading inflation from 100 has Θ 1.8 but 20–22 ejections.
+  - Fading inflation from 30 keeps fast growth (t_half 4.5 orbits) with 36–42 ejections.
+
+**Changed:** new `src/pool.js`, `bench-pool.mjs`, `sweep.mjs`, `analysis/` (stage3.py, FINDINGS.md,
+tables.md, figures/), `package.json`. `world.js` gained the step split, `addStarAccel` and the
+inflation ramp; `gravity.js` gained range-limited `accelGrouped`; the engine loop is async; `params`
+gained `backend`, `workers` and `inflationRamp`. Smoketest gained check 6 (the pool split).
+DEVPLAN closes Stages 2 and 3 and adds Stage 4 (past 5×) and Stage 5 (robustness: dt-convergence,
+seeds). CLAUDE.md and README updated (pool.js browser-only, runner/sweep/analysis, the
+hidden-pane throttle). Dropped my two scratch collections on mint (roundtrip, scratch_runs; 1
+doc each).
+**State:** smoke PASS 17/17 @ b457288. Batches are in MongoDB `diskAccretionDB` (batch_001–006)
+and in `analysis/runs/` (git-ignored, 31 MB). In-page (@ b457288), the gpu and workers backends
+step correctly from the UI. Not done: dt-convergence of the late-phase numbers (Stage 5); visible-pane
+fps for the CPU/worker backends (the pane stayed hidden).
+**Next:** Stage 5, if the numbers are going anywhere: rerun the inflation and base batches at dt/2
+and dt/4. Or Stage 4 (GPU collisions) for scale. Chris's call: whether fading inflation becomes the
+demo default.
+
 ## 2026-10-15 — Stage 1: the disk sim, Barnes-Hut + merging, benchmark
 
 **Done:** Replaced the drifters demo with the disk (DEVPLAN Stage 1, now DONE). SoA world, leapfrog

@@ -1,42 +1,43 @@
 # Disk Accretion — STATUS
 *One screen. The current pulse. Overwritten, never appended — for history read DEVLOG.*
 
-**Updated:** 2026-10-15 (Stage 1 close) — refreshed every session close; may carry unverified claims
+**Updated:** 2026-10-15 (Stages 2 + 3 close) — refreshed every session close; may carry unverified claims
 **Verified:** 2026-10-15 (scaffold) — last cold audit (`/audit`); the State section is trusted only as of this date
 
 ## Stage
-DEVPLAN Stage 1 — Physics core + watchable prototype `[ DONE ]` (closed 2026-10-15).
-Stage 2 (scale up: workers/GPU) and Stage 3 (regime checks) are `[ PLANNED ]`, not started.
+Stages 1, 2 (target half met) and 3 `[ DONE ]` (closed 2026-10-15). No stage active.
+`[ PLANNED ]`: Stage 4 (past 5× scale: GPU collisions, multi-step GPU) and Stage 5 (robustness
+of the Stage 3 numbers: dt-convergence, more seeds).
 
 ## State
-- Disk sim runs in the browser (http://localhost:8000/research/Disk%20Accretion/sim/ or file://) and
-  headless. smoke PASS 16/16 @ 9c12d6a (2026-10-15): mass closes to ~1e-14, brute L_z to round-off,
-  BH L_z 3.4e-7 over 4 orbits, BH force error checked vs brute.
-- Default run (10k bodies) visibly sweeps into a few oligarchs: 9 bodies hold 96% of the mass by
-  150 orbits (in-browser run, 2026-10-15).
-- `runner.mjs` ported to the new API, but **unverified against MongoDB** (no `node_modules`;
-  needs `npm i mongodb`).
+- Browser sim with three force backends: cpu (default), workers (4-worker pool), gpu (WebGPU
+  all-pairs). Both off-thread backends were stepped from the UI in the browser pane @ b457288.
+- smoke PASS 17/17 @ b457288 (2026-10-15): mass, L_z, energy, merge conservation, BH force
+  error, and the pool's split matching the serial walk bit for bit.
+- Stage 3 results in `analysis/FINDINGS.md`: 58 runs, MongoDB `diskAccretionDB` batch_001–006
+  plus local `analysis/runs/` (git-ignored); figures regenerate with `python analysis/stage3.py`.
 
 ## Metrics
-- Max N at 30 fps (i7-12700K, Chrome 152): Barnes-Hut ~11,500 at 4 steps/frame, ~40,000 at 1;
-  brute force ~2,200 at 4, ~4,700 at 1. Draw < 1 ms at 10k.
-- Step cost at 10k: ~6.6 ms (gravity ~5.6, collisions ~1.0). Force sum ~2.6 ns/interaction,
-  bound by sqrt/div throughput.
-- BH accuracy (N = 2000, default θ = 1.0, grouped + quadrupole): median 0.3% of the self-force.
+- Max N at 30 fps (i7-12700K / RTX 3070 Ti): CPU tree ~11.5k at 4 steps/frame, ~40k at 1;
+  GPU ~27k / ~88k (2.2–2.4×); worker pool ~1.9× per step at best (4 workers).
+- Runaway: M₁/⟨m⟩ peaks at 31–61 around 13–40 orbits; mass-function index q = 2.35 at 10 orbits.
+- Final spacing (default disk, 8 seeds, 3000 orbits): median 7.6 mutual Hill radii (IQR 6.8–8.1).
+- Growth time ∝ M_disk^−0.75 and ∝ inflation^−0.88. Ejections per run: 0 at inflation 100,
+  61–90 at inflation 3.
 
 ## Branches
 - `main` (local only, no remote)
 
 ## Open
-- Accepted gap: fixed-dt leapfrog under-resolves the closest softened encounters (|dE/E| ≈ 2e-4
-  with collisions off at dt = 0.01; converges with dt). Fine for watching. Stage 3 numbers need
-  a dt-convergence check or an adaptive/hybrid step.
-- The default disk is heavy (~1000 M⊕; oligarchs reach ~0.8 M_J) and ends in giant impacts, not
-  isolation. Disk-mass choice goes to Stage 3.
+- Accepted gap: fixed-dt leapfrog under-resolves the closest encounters. The late-phase numbers
+  (ejection counts, final e) are unconverged in dt until Stage 5 runs.
+- Finding to explain (Stage 5): oligarchs crowd at ≪ 1 R_H in 2D before the giant-impact phase
+  spaces them out.
+- Chris's call: make fading inflation (f₀ = 30, q = 1) the demo default? It keeps the fast early
+  growth and brings back scattering and ejection.
 
 ## Next action
-Chris's pick: Stage 2 (a worker pool over the grouped walk, independent groups, 20 threads) or
-Stage 3 (a disk-mass sweep toward an MMSN-like disk, mass spectrum, Hill spacing).
+Stage 5: rerun batch_003 and batch_005 at dt/2 and dt/4 (`--set dt=0.005`), then compare.
 
 ## Blockers
 - none
