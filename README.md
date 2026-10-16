@@ -8,6 +8,8 @@ a spatial hash with perfect merging. On an i7-12700K it runs ~11.5k bodies at 30
 steps per frame, or ~40k at 1 step per frame; the WebGPU backend (RTX 3070 Ti) ~27k / ~88k
 (see DEVLOG for the benchmarks). Stage 3's science results are in `analysis/FINDINGS.md`.
 
+**Live:** https://algorithm0r.github.io/Disk-Accretion/ · **Repo:** https://github.com/algorithm0r/Disk-Accretion
+
 ## Run
 - **Browser:** open `index.html` (file:// works), or
   http://localhost:8000/research/Disk%20Accretion/sim/ via the always-on Static Server. Scroll to

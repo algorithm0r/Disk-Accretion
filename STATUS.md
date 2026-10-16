@@ -10,6 +10,9 @@ Stages 1, 2 (target half met) and 3 `[ DONE ]` (closed 2026-10-15). No stage act
 of the Stage 3 numbers: dt-convergence, more seeds).
 
 ## State
+- Published 2026-10-15: public repo https://github.com/algorithm0r/Disk-Accretion, Pages from
+  `main` at https://algorithm0r.github.io/Disk-Accretion/. Live page loaded and ran in the browser
+  pane (cpu backend, bodies merging, no console errors) @ c1da12c.
 - Browser sim with three force backends: cpu (default), workers (4-worker pool), gpu (WebGPU
   all-pairs). Both off-thread backends were stepped from the UI in the browser pane @ b457288.
 - smoke PASS 17/17 @ b457288 (2026-10-15): mass, L_z, energy, merge conservation, BH force
