@@ -1,7 +1,8 @@
 // Stage 3 batch launcher: runs runner.mjs configs as parallel child processes (one process
 // per config × seed, conventions §4) and writes each packet to MongoDB (collection batch_NNN
 // via the research Server) and to analysis/runs/<batch>/<run>.json.
-//   node sweep.mjs <plan>[+<plan>...] [--jobs 16] [--dry]   (plans: base mass inflation toomre base3k mass3k all)
+//   node sweep.mjs <plan>[+<plan>...] [--jobs 16] [--dry]   (plans: base mass inflation toomre base3k mass3k all;
+//   Stage 5: infl4 infl005 infl0025 base005 base0025 dtconv)
 //
 // Run-name grammar: <exp>_M<diskMass>_I<inflation>[r<ramp q>]_N<N>_s<seed>
 //   batch_001  base       default disk, 4 seeds, 1000 orbits: growth modes + final spacing
@@ -10,6 +11,13 @@
 //   batch_004  toomre     collisions off, disk mass 0.003 … 0.1: does a Q < 1 disk clump?
 //   batch_005  base3k     batch_001's configs to 3000 orbits, big-body (k, a, e) every sample
 //   batch_006  mass3k     batch_002's configs to 3000 orbits, likewise
+// Stage 5 (dt-convergence; run names gain _dt<dt>; the integrator is chaotic, so compare
+// ensembles across dt, not seed against seed):
+//   batch_007  infl4      batch_003's configs, seeds 3-4 at dt = 0.01 (003 + 007 = 4 seeds)
+//   batch_008  infl005    batch_003's configs, 4 seeds, dt = 0.005
+//   batch_009  infl0025   batch_003's configs, 4 seeds, dt = 0.0025
+//   batch_010  base005    batch_005's config, 8 seeds, 3000 orbits, dt = 0.005
+//   batch_011  base0025   batch_005's config, 8 seeds, 3000 orbits, dt = 0.0025
 import { spawn } from 'child_process';
 import { mkdirSync, createWriteStream } from 'fs';
 import path from 'path';
@@ -24,7 +32,7 @@ const dry = argv.includes('--dry');
 
 const fmt = (v) => String(v).replace('.', 'p');
 function cfg(batch, exp, set, opts) {
-  const tag = exp + '_M' + fmt(set.diskMass) + '_I' + fmt(set.radiusInflation) + (set.inflationRamp ? 'r' + fmt(set.inflationRamp) : '') + (set.collisions === false ? '_nocoll' : '') + '_N' + set.N;
+  const tag = exp + '_M' + fmt(set.diskMass) + '_I' + fmt(set.radiusInflation) + (set.inflationRamp ? 'r' + fmt(set.inflationRamp) : '') + (set.collisions === false ? '_nocoll' : '') + '_N' + set.N + (set.dt ? '_dt' + fmt(set.dt) : '');
   return Object.assign({ batch, name: tag, set }, opts);
 }
 
@@ -60,11 +68,31 @@ PLANS.toomre = () => [0.003, 0.01, 0.03, 0.1].map((M) => Object.assign(
 // big-body orbital elements (batch_001/002 sampled only the final state's a, e)
 PLANS.base3k = () => [1, 2, 3, 4, 5, 6, 7, 8].map((sd) => Object.assign(PLANS.base()[0], { batch: 'batch_005', orbits: 3000, every: 10, snap: '0,1,3,10,30,100,300,1000,3000', seeds: String(sd) }));
 PLANS.mass3k = () => PLANS.mass().map((c) => Object.assign(c, { batch: 'batch_006', orbits: 3000, every: 10 }));
+// Stage 5: the same configs at smaller dt. Step count, and so wall time and the wall cap, scale as 1/dt;
+// `cost` (est. seconds, uncontended) orders the queue so the slowest runs start first.
+const INFL_COST = { '1,0': 550, '3,0': 155, '10,0': 73, '30,0': 42, '100,0': 31, '30,1': 67, '100,1': 40 };
+const atDt = (c, batch, dt, seed) => Object.assign({}, c, { batch, seeds: String(seed), set: Object.assign({}, c.set, { dt }),
+  name: c.name + '_dt' + fmt(dt), maxMin: Math.ceil(c.maxMin * 0.01 / dt), cost: (c.cost || 150) * 0.01 / dt });
+const inflAt = (batch, dt, seeds) => {
+  const out = [];
+  for (const c of PLANS.inflation().filter((c) => c.seeds === '1')) {
+    c.cost = INFL_COST[c.set.radiusInflation + ',' + c.set.inflationRamp];
+    for (const sd of seeds) out.push(dt === 0.01 ? Object.assign({}, c, { batch, seeds: String(sd) }) : atDt(c, batch, dt, sd));
+  }
+  return out;
+};
+const baseAt = (batch, dt) => PLANS.base3k().map((c) => atDt(c, batch, dt, c.seeds));
+PLANS.infl4 = () => inflAt('batch_007', 0.01, [3, 4]);
+PLANS.infl005 = () => inflAt('batch_008', 0.005, [1, 2, 3, 4]);
+PLANS.infl0025 = () => inflAt('batch_009', 0.0025, [1, 2, 3, 4]);
+PLANS.base005 = () => baseAt('batch_010', 0.005);
+PLANS.base0025 = () => baseAt('batch_011', 0.0025);
+PLANS.dtconv = () => [...PLANS.infl4(), ...PLANS.infl005(), ...PLANS.infl0025(), ...PLANS.base005(), ...PLANS.base0025()];
 PLANS.all = () => [...PLANS.base(), ...PLANS.mass(), ...PLANS.inflation(), ...PLANS.toomre()];
 
 const plan = which.split('+').flatMap((w) => PLANS[w]());
 // longest-first: heavy-N, low-growth configs hold the pool longest
-plan.sort((a, b) => (b.maxMin - a.maxMin) || (b.set.N - a.set.N));
+plan.sort((a, b) => ((b.cost || 0) - (a.cost || 0)) || (b.maxMin - a.maxMin) || (b.set.N - a.set.N));
 const logDir = path.join(__dirname, 'analysis', 'logs');
 mkdirSync(logDir, { recursive: true });
 console.log('Disk Accretion sweep: ' + plan.length + ' runs, ' + jobs + ' at a time' + (dry ? ' (dry)' : ''));

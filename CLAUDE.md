@@ -52,7 +52,10 @@ tokens and a `**Done when:**` criterion. `/log-session` rewrites STATUS — don'
   [--seeds 1,2]` — one config per process; packet to MongoDB over socket (needs `npm install`
   for socket.io-client) AND local JSON in `analysis/runs/<batch>/`.
 - Batches: `node sweep.mjs <plan>[+<plan>]` (plans and the run-name grammar are in its header;
-  batch_001–006 are taken), then `python analysis/stage3.py` → `analysis/figures/`, `tables.md`.
+  batch_001–011 are taken), then `python analysis/stage3.py` → `analysis/figures/`, `tables.md`.
+  Run names carry `_dt<dt>` when dt is overridden; the dynamics are chaotic, so compare seeds as
+  ensembles across dt, never seed against seed. The hot (scattering-heavy) configs are not
+  dt-converged at dt/4 (FINDINGS §4): don't quote their removal counts as converged.
   `analysis/FINDINGS.md` ties each claim to its figure and command. Runs are fast (the disk
   thins out): a 10k-body 3000-orbit run takes ~2.5 min.
 - Smoke (no DB): `node smoketest.mjs` — prints the numbers that go in the DEVLOG entry.

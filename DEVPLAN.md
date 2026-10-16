@@ -15,11 +15,13 @@
 - **Stage 3 (2026-10-15):** orbit-sampled `runner.mjs` (mass spectra, big-body a/e, snapshots;
   MongoDB over socket + local JSON), `sweep.mjs` (parallel batches), `inflationRamp`,
   `analysis/stage3.py` (9 figures, tables) and `analysis/FINDINGS.md`.
+- **Stage 5 (2026-10-15):** dt-convergence batches (`sweep.mjs dtconv`, batch_007–011, 86 runs),
+  `stage3.py` convergence table + fig9 and leader-spacing analysis + fig10, FINDINGS §4–5.
 
 ## Not yet built
 - 5× scale-up: GPU collisions, multi-step GPU integration, SharedArrayBuffer (Stage 4).
-- dt-converged error bars on the Stage 3 numbers; adaptive steps for close encounters (Stage 5;
-  see the integrator note below).
+- A step that resolves pericentre passes and close encounters, so the hot-disk (scattering)
+  numbers converge (Stage 6; see the integrator note below).
 
 ## Origin
 Came out of a PA conversation with Chris (2026-10-15): "a 2d rotating disk of particles that
@@ -53,6 +55,12 @@ one step) cost |ΔE/E| ≈ 2e-4; it converges with dt (6e-7 at dt = 0.0025). Wit
 bodies merge at r₁+r₂ ≈ ε, so the same under-resolution applies to the last approach before a
 merge. Fine for a watchable prototype; Stage 3 numbers should check dt-convergence or move to a
 hybrid/adaptive step (REBOUND's MERCURIUS/IAS15 territory).
+*Measured (Stage 5, 2026-10-15):* the default disk and constant inflation f ≥ 10 are dt-converged
+at dt/4 within seed scatter. The hot, scattering-heavy disks (f ≤ 3, fading ramps, e ≈ 0.4–0.5)
+are not: they eject 26–44% fewer bodies and eject first ~2× later at dt/4, still moving between
+dt/2 and dt/4. A star-only orbit at e = 0.9 (q = 0.1) carries |ΔE/E| 0.23 at dt = 0.01 against
+1.5e-2 at dt/4, so pericentre passes near the star are a likely cause, alongside fast close
+encounters (FINDINGS §4).
 
 **Collisions = perfect merge.** Merges conserve mass, momentum and angular momentum but dissipate
 energy. *Amended 2026-10-15:* orbital L_z alone is NOT conserved by a merge: the pair's orbital
@@ -197,14 +205,34 @@ oligarchic phase the big bodies crowd at ≪ 1 R_H rather than sitting isolated.
       server) → SharedArrayBuffer pool, and the sim itself in a Worker
 **Done when:** max N at ~30 fps ≥ 5× the Stage 1 figure (≥ ~57k at 4 steps/frame).
 
-### Stage 5 — Are the Stage 3 numbers robust?  [ PLANNED ]
-(From Stage 3.)
-- [ ] dt-convergence of the late-phase numbers (ejection counts, final e and spacing) at dt/2, dt/4,
-      since closest encounters are under-resolved at dt = 0.01
-- [ ] More seeds per sweep point (2 now) and a larger N for the light disks
-- [ ] Why the oligarchs crowd at ≪ 1 R_H in 2D: run the same disk with less inflation / the fading
-      ramp and see whether feeding-zone spacing appears before the giant-impact phase
-- [ ] Decide the demo default: fading inflation (f₀ = 30, q = 1) keeps fast early growth and
-      restores scattering (Chris's call)
-*Deferred, not open:* fragmentation instead of perfect merging (Barnes et al. 2009); a 3D option.
+### Stage 5 — Are the Stage 3 numbers robust?  [ DONE ]
+(From Stage 3. Closed 2026-10-15.)
+- [x] dt-convergence of the late-phase numbers at dt/2, dt/4: batch_007–011 (`node sweep.mjs
+      dtconv`, 86 runs, 32 min), `stage3.py` dtconv table + fig9, FINDINGS §4. The default disk
+      (spacing 7.6 / 7.0 / 7.6 R_H, 4–6 ejections, first ejection ~360–400 orbits) and f ≥ 10
+      survive. The hot configs (f ≤ 3, fading) do not: fewer ejections and later first ejections
+      at smaller dt. f = 1 grows faster at smaller dt (t½ 104 → 67), which reverses half of
+      Stage 3's Correction 2. The default disk's final e (0.11–0.21) is unresolved.
+- [x] More seeds: the inflation sweep 2 → 4 at every dt; the default disk 8 at every dt.
+- [x] Why the oligarchs crowd: mostly the selection cut (it counted the field). The leaders alone
+      sit at 1.5–4 R_H during 7–40 orbits, not ≪ 1. No inflation scheme (f = 1–100, fading q = 1)
+      gives feeding-zone spacing: the leaders reach 5 R_H only once they hold most of the mass
+      (FINDINGS §5, fig10). Fading inflation crowds them more.
 **Done when:** the Stage 3 headline numbers are quoted with dt-converged error bars.
+✓ Met for the default disk and f ≥ 10 (FINDINGS §4, mean ± SE over seeds at three dt). For the
+hot configs the finding is that fixed-dt numbers do not converge by dt/4, which moved to Stage 6.
+
+### Stage 6 — Converge the hot disks  [ PLANNED ]
+(From Stage 5.)
+- [ ] A step that resolves pericentre passes and close encounters (per-body adaptive step,
+      or a hybrid à la MERCURIUS), keeping `smoketest.mjs` green. Then rerun batch_008/009's hot
+      configs and check that ejection counts and first-ejection times stop moving with dt.
+- [ ] Rerun the disk-mass sweep (batch_006) at dt/4, or with the new step. Heavy disks are hot,
+      so their late-phase counts are unconverged.
+- [ ] A larger N for the light disks (M ≤ 3e-4), the closest thing here to a quiet oligarchy
+- [ ] Decide the demo default: fading inflation (f₀ = 30, q = 1) keeps fast early growth and
+      restores scattering (Chris's call; still holds at dt/4, with fewer ejections)
+*Deferred, not open:* fragmentation instead of perfect merging (Barnes et al. 2009); a 3D option
+(would test whether the 2D geometry drives the oligarch crowding, FINDINGS §5).
+**Done when:** the hot-disk ejection counts and first-ejection times agree within seed scatter
+between two step settings.

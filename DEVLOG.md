@@ -1,6 +1,58 @@
 # Disk Accretion — DEVLOG
 Newest entry on top. **Append only — never edit past entries.**
 
+## 2026-10-15 — Stage 5: dt-convergence of the Stage 3 numbers, and the oligarch crowding
+
+**Done:** Stage 5 (closed). It ran in a side session started from the PA session.
+- **dt sweep.** `sweep.mjs` gained `infl4 infl005 infl0025 base005 base0025` (and `dtconv` = all
+  five). Run names carry `_dt<dt>`; `cost` orders the queue; the wall cap scales with 1/dt.
+  86 runs, batch_007–011, 32 min at 16 processes, no wall caps, all 86 inserted in MongoDB.
+  This covers the inflation sweep at 4 seeds (seeds 3–4 added at dt 0.01) and the default disk at
+  8 seeds, each at dt 0.01, 0.005 and 0.0025.
+- **`analysis/stage3.py`.** `dtconv()`: mean ± SE table with z-scores, plus fig9. t½ is now
+  interpolated in log n vs log t (`half_time`), where before it was quantised to the sample grid.
+  `feeding()`: leader spacing (k ≥ 30% k_max), e·a/R_H and the leaders' mass share, plus fig10.
+- **Survives at dt/4** (FINDINGS §4):
+  - the default disk: final spacing 7.6 / 7.0 / 7.6 R_H, ejections 5.4 / 3.6 / 5.9 per run, first
+    ejection ~360–400 orbits, t½ 2.6
+  - every quantity at f = 10, 30, 100
+  - every growth time except f = 1, and the f ≥ 3 exponent (−0.73 to −0.74)
+- **Fails at dt/4: the hot configs** (f ≤ 3, fading ramps). At smaller dt, ejections fall
+  26–44%, accretion falls 35–67%, and the first ejection comes ~2× later (still moving between
+  dt/2 and dt/4).
+  - f = 1 grows faster at smaller dt (t½ 104 → 67) and ejects more than f = 3, so "f = 1 ejects
+    fewer than f = 3" (half of Stage 3's Correction 2) was a dt artifact.
+  - The default disk's final e (0.14 / 0.11 / 0.21) is unresolved.
+  - Likely cause: pericentre passes. A star-only orbit at e = 0.9 has peak |ΔE/E| 0.23 at
+    dt 0.01 and 1.5e-2 at dt/4 (scratch test, numbers in FINDINGS §4).
+- **Crowding** (FINDINGS §5): the Stage 3 "≪ 1 R_H" was the selection cut counting the field.
+  - The leaders sit at 1.5–4 R_H through 7–40 orbits.
+  - No inflation scheme gives feeding-zone spacing: the leaders reach 5 R_H only when they hold
+    most of the mass.
+  - Fading inflation crowds the leaders more.
+  - The contact separation is 0.2 R_H,mutual at f = 30, so inflated radii don't short-circuit
+    Hill-scale dynamics.
+
+**Changed:**
+- `sweep.mjs` (Stage 5 plans, `_dt` names, cost ordering); `analysis/stage3.py` (dtconv,
+  feeding, half_time; inflation table now 4 seeds; UTF-8 stdout)
+- `analysis/FINDINGS.md`: §1–3 amended in place, new §4–5, caveats; `tables.md`, fig6/7
+  regenerated; new fig9, fig10
+- DEVPLAN: Stage 5 DONE; new Stage 6 "Converge the hot disks" `[ PLANNED ]`; integrator note
+  amended
+- CLAUDE.md: batch_001–011 taken, the `_dt` naming, the ensemble-not-seed rule, the hot configs
+  unconverged. README: batch range and the `dtconv` plan.
+
+**State:**
+- Smoke PASS 17/17 @ db96a0d-dirty (sim core untouched): mass err 6.07e-15, L_z 1.70e-15, star-only
+  |dE/E| 8.15e-8, self-gravity |dE/E| 1.76e-4 → 6.35e-7 (dt 0.01 → 0.0025).
+- `python analysis/stage3.py` regenerates every table and figure on a plain console.
+- Not done: the disk-mass sweep (batch_006) was not rerun at dt/4, and the heavy disks are hot.
+
+**Next:** Stage 6, an adaptive or hybrid step for pericentres and close encounters, then rerun
+the hot configs. Or Stage 4 (GPU collisions) for scale. Chris's call: fading inflation as the demo
+default (it still holds at dt/4, with fewer ejections).
+
 ## 2026-10-15 — published
 
 **Done:** Published from the PA session on Chris's direct go-ahead: public repo
