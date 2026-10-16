@@ -11,9 +11,11 @@ async function setBackend(kind) {
     if (kind === 'workers') provider = new GravityPool(PARAMETERS.workers);
     else if (kind === 'gpu') provider = await GpuGravity.create();
   } catch (e) {
+    // e.g. no WebGPU in this browser, or Workers blocked: fall back to the main thread
     setStatus('backend ' + kind + ' unavailable: ' + e.message + ' (using cpu)');
     PARAMETERS.backend = 'cpu';
     provider = null;
+    if (typeof syncControl === 'function') syncControl('backend');
   }
   if (world) world.provider = provider;
 }

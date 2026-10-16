@@ -13,6 +13,11 @@ function fmtNum(v) {
   return (a >= 100) ? v.toFixed(0) : (a >= 10 ? v.toFixed(1) : v.toFixed(3));
 }
 
+// per-control refreshers, so code that changes PARAMETERS (e.g. a backend falling back to cpu)
+// can put the panel back in step with it
+var CONTROL_SYNC = {};
+function syncControl(key) { if (CONTROL_SYNC[key]) CONTROL_SYNC[key](); }
+
 function buildControls() {
   const panel = document.getElementById('controls');
   for (const spec of PARAM_SCHEMA) {
@@ -37,6 +42,7 @@ function buildControls() {
       const sel = document.createElement('select');
       for (const o of spec.options) { const op = document.createElement('option'); op.value = o; op.textContent = o; sel.appendChild(op); }
       sel.value = PARAMETERS[spec.key];
+      CONTROL_SYNC[spec.key] = () => { sel.value = PARAMETERS[spec.key]; };
       sel.onchange = () => { PARAMETERS[spec.key] = sel.value; apply(); };
       wrap.appendChild(sel);
     } else if (spec.type === 'bool') {

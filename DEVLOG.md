@@ -1,6 +1,24 @@
 # Disk Accretion — DEVLOG
 Newest entry on top. **Append only — never edit past entries.**
 
+## 2026-10-15 — Pages prep (publish pending)
+
+**Done:** Prepared for publishing as public `algorithm0r/Disk-Accretion` with GitHub Pages from
+`main` (Chris approved this in the PA session; relayed here). Audit: 40 tracked files, no secrets.
+The largest files are the 9 Stage 3 figures (1.7 MB). Run packets (`analysis/runs/`, 31 MB) and
+sweep logs are git-ignored. The only infrastructure reference is the research Server URL in
+`params.js`, and `autoSave: false` means the page never writes to the DB. Pages needs no COOP/COEP:
+the workers backend copies bodies by message rather than using SharedArrayBuffer, and the gpu
+and workers backends fall back to cpu when unavailable. The panel now follows the fallback
+(`syncControl`), verified in the browser pane by forcing the GPU path to fail.
+**Changed:** `src/ui.js` (CONTROL_SYNC/syncControl), `src/main.js` (fallback re-syncs the backend
+select).
+**State:** smoke unchanged (sim core untouched). **Not published:** this session's auto-mode
+classifier refused the `gh` calls ("Create Public Surface") because the approval reached it
+secondhand, so the repo, Pages and About settings are not created yet.
+**Next:** Chris runs the publish commands, or approves them in this session; then check the live
+Pages URL and add the URLs to README / STATUS / the PA hub.
+
 ## 2026-10-15 — Stages 2 + 3: worker/GPU backends, regime batches, the inflation test
 
 **Done:** Stage 2 (closed, target half met) and Stage 3 (closed), at Chris's "try to get through

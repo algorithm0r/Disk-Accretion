@@ -1,7 +1,7 @@
 # Disk Accretion — STATUS
 *One screen. The current pulse. Overwritten, never appended — for history read DEVLOG.*
 
-**Updated:** 2026-10-15 (Stages 2 + 3 close) — refreshed every session close; may carry unverified claims
+**Updated:** 2026-10-15 (Stages 2 + 3 close; Pages prep) — refreshed every session close; may carry unverified claims
 **Verified:** 2026-10-15 (scaffold) — last cold audit (`/audit`); the State section is trusted only as of this date
 
 ## Stage
@@ -29,6 +29,8 @@ of the Stage 3 numbers: dt-convergence, more seeds).
 - `main` (local only, no remote)
 
 ## Open
+- **Publish pending:** public repo algorithm0r/Disk-Accretion + Pages from main, approved by Chris
+  (via the PA session) but blocked in the build session by the auto-mode classifier; Pages prep done.
 - Accepted gap: fixed-dt leapfrog under-resolves the closest encounters. The late-phase numbers
   (ejection counts, final e) are unconverged in dt until Stage 5 runs.
 - Finding to explain (Stage 5): oligarchs crowd at ≪ 1 R_H in 2D before the giant-impact phase
