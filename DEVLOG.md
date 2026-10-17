@@ -1,6 +1,80 @@
 # Disk Accretion — DEVLOG
 Newest entry on top. **Append only — never edit past entries.**
 
+## 2026-10-16 — Stage 8: analytic benchmarks as teaching presets (VALIDATION.md)
+
+**Done:** Stage 8, closed. Chris approved it ("yes, let's do that"), relayed from the PA session.
+- **Finding first:** a pinned star has no L4/L5 at all, which is more than the brief's expected
+  "O(μ)" shift. The star's reflex pull toward the planet (the indirect term) is what balances the
+  planet's tangential pull at the triangular points. Scratch test: particles at 60° circulate the
+  whole orbit with a pinned star but librate about 60.0° with a live one. So the Trojan, Routh,
+  chaotic-zone and Kirkwood presets run with a live star, and the pinned failure is a stated
+  teaching point (VALIDATION §2, About panel, FINDINGS caveat).
+- **Core:**
+  - Massless test particles (m = 0, r = 0).
+  - An exact massive-only gravity sum and swept collision check when ≤ 64 bodies have mass
+    (`gravityMode 'direct'`; 4–8× faster for presets).
+  - `liveStar`: the star is body 0, barycentric, leapfrog-only.
+  - Bodies carry `tag` through compaction so trackers can follow them.
+- **`src/presets.js`:** 8 presets (disk, toomre, kepler, trojans, routh, gap, kirkwood, hill), each
+  setup + Tracker, shared by the panel, `smoketest.mjs` (6 new checks) and `validate.mjs`.
+- **Panel:**
+  - preset picker with explainers;
+  - a live measured-vs-expected readout, which shows "measuring… x / N orbits" until a minimum run
+    length (Hill may conclude early on an encounter);
+  - preset-scoped controls (planet mass, eccentricity, Δ, live star);
+  - per-preset steps/frame (Trojans pass in ~28 s of viewing);
+  - an About panel on what the model simplifies, linking to VALIDATION.md and FINDINGS.md.
+- **Defaults unchanged:** default disk, leapfrog, inflation 30.
+- **`validate.mjs`** → VALIDATION.md (setup, reference, tolerance, measured; amendments
+  append-only). 7.9 min, sections in parallel. **All PASS:**
+  1. **Kepler (hybrid, 100 orbits):** |ΔE/E| 2e-11, period error 1.4e-11, no apse drift. Leapfrog
+     contrast at dt 0.01: |ΔE/E| 4e-8 at e = 0, 0.38 at e = 0.85.
+  2. **Trojans (μ = 1e-3, live star):** small tadpoles centred at **+60.05° / −60.05°** (±0.5°).
+     Pinned star: 0 tadpoles; all particles librate about 180°.
+  3. **Routh:** linear probes 1e-5 rad off L4 put the edge between μ = m/(M★+m) = **0.03846 (stable)
+     and 0.03865 (unstable)**, around μ_c = 0.03852.
+     - Pinned star: unstable even at μ = 0.001.
+     - A first pass "failed" because it used m/M★ rather than the mass fraction.
+     - The visible 1° swarm saturates just above μ_c (nonlinear), so the verdict uses the probes.
+  4. **Chaotic zone, 300 orbits:** inner half-width **0.100 / 0.140 / 0.200 / 0.242 / 0.358** against
+     1.3 μ^{2/7} = 0.094 / 0.128 / 0.181 / 0.247 / 0.349 (μ = 1e-4 … 1e-2). The fitted exponent is
+     **0.269** (2/7 = 0.286). The outer zone is wider (reported).
+  5. **Resonance gaps, 1000 orbits, planet e = 0.05:**
+     - At μ = 3e-3: 3:1 at 0.482 (predicted 0.481, 3.2σ, marginal) and 2:1 at 0.632 (0.630, 7.6σ).
+     - At μ = 1e-2: 5:2 at 0.542 as well.
+     - At μ = 1e-3: only the 2:1 shows.
+     - 7:3 never shows.
+     - It is a location test: these dips are resonant excitation within ~100 orbits, not the
+       ~10⁵-orbit chaotic clearing of the real belt (stated plainly).
+  6. **Hill stability (hybrid, 10⁴ orbits per Δ):** encounters at Δ ≤ 3.3 (first at orbit 31 →
+     4968 as Δ → 3.3), none at Δ ≥ 3.4 (Gladman 2√3 = 3.464).
+  7. **Toomre:** peak clumping 3.55× at Q ≈ 0.3 against 1.31× at Q ≈ 9.
+  8. **Runaway/spacing:** points to FINDINGS §1, §6.
+
+**Changed:**
+- New: `src/presets.js`, `validate.mjs`, `VALIDATION.md`, `analysis/validation_table.md` +
+  `validation.json`.
+- Core: `src/world.js` (preset hook, starIndex, massive-only path, liveStar branches, tag, guarded
+  massError/LzDrift); `src/gravity.js` (`massiveAccel`); `src/collide.js` (`collideMassive`).
+- UI: `src/params.js` (preset, liveStar, planetMass, planetEcc, hillDelta; preset-scoped schema;
+  DEFAULT_PARAMETERS; steps/frame up to 400); `src/ui.js` (picker, applyPreset,
+  refreshPresetResult, About); `src/main.js` (preset tracker entity); `src/observer.js` (live star
+  at its body; test particles as bright 2×2 dots); `index.html` (picker, explainer, result box,
+  About modal, presets.js).
+- Tests: `smoketest.mjs` §8.
+- Docs: FINDINGS caveat (pinned star, no co-orbitals); DEVPLAN Stage 8 (closed); CLAUDE.md and
+  README.
+
+**State:**
+- smoke PASS 29/29 @ b81555e; validate PASS (7.9 min).
+- Pushed; the live Pages site @ a121efb was verified in the browser pane: 8 presets, Trojans and
+  Kepler pass, About links to VALIDATION.md, no console errors. All served files byte-identical
+  to HEAD.
+
+**Next:** Stage 7 (parked: disk-mass sweep under the hybrid), or Chris's demo-default calls
+(fading inflation; which preset opens first).
+
 ## 2026-10-16 — Stage 6: hybrid symplectic integrator; the hot disks converge
 
 **Done:** Stage 6, closed. Chris approved it ("ok, let's do stage 6"), relayed from the PA session.

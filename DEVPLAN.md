@@ -21,10 +21,15 @@
   MERCURIUS-style changeover, DP5(4) encounter groups, swept contacts), `integrator` param + panel
   control, smoketest checks 7a–d, `bench.mjs --integrator`, batch_012–017 (168 runs),
   `stage3.py hybconv()` + fig11, FINDINGS §6.
+- **Stage 8 (2026-10-16):** `src/presets.js` (8 presets with trackers), massless test particles,
+  live-star option, exact massive-only gravity/collisions, preset picker + explainers +
+  measured-vs-expected readout + About panel, `validate.mjs`, VALIDATION.md.
 
 ## Not yet built
 - 5× scale-up: GPU collisions, multi-step GPU integration, SharedArrayBuffer (Stage 4).
 - Hybrid reruns of the disk-mass sweep and the light disks; a faster hybrid (Stage 7).
+- A live-star disk (indirect term in the disk runs) is possible with leapfrog only; the hybrid needs
+  democratic-heliocentric coordinates to support it (not planned).
 
 ## Origin
 Came out of a PA conversation with Chris (2026-10-15): "a 2d rotating disk of particles that
@@ -294,20 +299,26 @@ resolved at 0.14 ± 0.02. Two residual flags (f = 10 final e, f = 3 t½ ±2%) ha
       encounter integrator or a mass-dependent r_c for small bodies could make it a browser default
 **Done when:** every headline in FINDINGS rests on hybrid runs that converge across dt.
 
-### Stage 8 — Analytic benchmarks as teaching presets  [ ACTIVE ]
+### Stage 8 — Analytic benchmarks as teaching presets  [ DONE ] (closed 2026-10-16)
 (Added 2026-10-16, approved by Chris: "yes, let's do that". Runs before Stage 7, which stays parked.)
 Why: our *verification* is strong (conservation laws, force error, dt convergence), but our external
 *validation* was only loose agreement with textbook results. So: setups with exact known answers,
 each a one-click preset students can watch, each with a measured-vs-analytic check and an explicit
 tolerance, recorded in VALIDATION.md (setup, reference, tolerance; dated amendments appended).
-- [ ] Massless test particles (m = 0: feel gravity, exert none, never touch each other) and an exact
-      massive-bodies-only force sum / collision check for few-massive setups
-- [ ] Live-star option (star = body 0, barycentric, leapfrog only): the pinned star drops the
+- [x] Massless test particles (m = 0: feel gravity, exert none, never touch each other) and an exact
+      massive-bodies-only force sum / collision check for few-massive setups (`massiveAccel`,
+      `collideMassive`, `gravityMode 'direct'`)
+- [x] Live-star option (star = body 0, barycentric, leapfrog only): the pinned star drops the
       indirect term, which (found 2026-10-16) removes L4/L5 entirely, not just shifts them at O(μ)
-- [ ] Presets with trackers (`src/presets.js`), shared by the panel, smoketest.mjs and validate.mjs:
+- [x] Presets with trackers (`src/presets.js`), shared by the panel, smoketest.mjs and validate.mjs:
       Kepler, Trojans, Routh, chaotic zone, Kirkwood-like gaps, Hill stability, Toomre, the default disk
-- [ ] Panel: preset picker, explainers, live "measured vs expected" (with a minimum run length before
+- [x] Panel: preset picker, explainers, live "measured vs expected" (with a minimum run length before
       a verdict), About panel (what the model simplifies), link to VALIDATION.md
-- [ ] Fast checks in smoketest.mjs; slow ones in validate.mjs → VALIDATION.md table, DEVLOG numbers
+- [x] Fast checks in smoketest.mjs (6 benchmark checks); slow ones in validate.mjs → VALIDATION.md table
+      (all pass; Kirkwood 3:1 marginal at 3.2σ), DEVLOG numbers
 **Done when:** every benchmark has a measured value against its reference with a stated tolerance in
 VALIDATION.md, the fast ones run in the smoketest, and the presets load and run on the live page.
+✓ Met: VALIDATION.md has 8 benchmarks (14 rows), all PASS or informational; smoke 29/29; the live
+page @ a121efb runs the presets (Trojans 60.05°/−60.05°, Kepler exact) with no console errors.
+Resonance gaps are a location test with a heavier planet (μ = 3e-3), not the 10⁵-orbit chaotic
+clearing of the real belt; said plainly in VALIDATION.md §5.
