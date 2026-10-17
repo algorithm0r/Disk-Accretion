@@ -109,6 +109,36 @@ var CollisionGrid = class CollisionGrid {
     return merges;
   }
 };
+// With only a few massive bodies among massless test particles (world.gravityMode 'direct'),
+// contact can only involve a massive body, so test every body against the massive ones only
+// (the same swept test as the grid) instead of hashing thousands of particles each step.
+CollisionGrid.prototype.collideMassive = function (world, dt, idx, nm) {
+  const n = world.n, x = world.x, y = world.y, vx = world.vx, vy = world.vy, r = world.r, dead = world.dead, m = world.m;
+  let merges = 0;
+  for (let q = 0; q < nm; q++) {
+    const j = idx[q];
+    if (j >= n || dead[j] || !(m[j] > 0)) continue;
+    for (let i = 0; i < n; i++) {
+      if (i === j || dead[i] || dead[j]) continue;
+      if (m[i] > 0 && i < j) continue;               // massive pairs once
+      const dx = x[j] - x[i], dy = y[j] - y[i], rs = r[i] + r[j];
+      const d2 = dx * dx + dy * dy;
+      let hit = d2 < rs * rs;
+      if (!hit && d2 < (rs + 0.05) * (rs + 0.05)) {
+        const ux = vx[j] - vx[i], uy = vy[j] - vy[i], dot = dx * ux + dy * uy;
+        if (dot > 0) {
+          let t = dot / (ux * ux + uy * uy);
+          if (t > dt) t = dt;
+          const cx = dx - ux * t, cy = dy - uy * t;
+          hit = cx * cx + cy * cy < rs * rs;
+        }
+      }
+      if (hit) { merges++; world.merge(i, j); }
+    }
+  }
+  return merges;
+};
+
 // cell offsets scanned per body: own cell first, then the forward half of the 3×3 ring
 CollisionGrid.OX = [0, 1, -1, 0, 1];
 CollisionGrid.OY = [0, 0, 1, 1, 1];

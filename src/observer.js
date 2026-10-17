@@ -62,8 +62,18 @@ var Observer = class Observer {
     if (this.big.length < n) this.big = new Int32Array(n);
     const big = this.big;
     let nBig = 0;
+    const si = w.starIndex;
     for (let i = 0; i < n; i++) {
+      if (i === si) continue;   // a live star is drawn as the star, below
       const k = m[i] * invM0;
+      if (m[i] === 0) {
+        // a massless test particle (presets): a bright 2×2 dot, so a few hundred stay visible
+        const px = (ox + x[i] * sc) | 0, py = (oy - y[i] * sc) | 0;
+        if (px < 0 || py < 0 || px >= W - 1 || py >= H - 1) continue;
+        const o = py * W + px;
+        buf[o] = buf[o + 1] = buf[o + W] = buf[o + W + 1] = 0xffffd89f;   // #9fd8ff (ABGR)
+        continue;
+      }
       if (k >= 4 || r[i] * sc >= 1) { big[nBig++] = i; continue; }
       const px = (ox + x[i] * sc) | 0, py = (oy - y[i] * sc) | 0;
       if (px < 0 || py < 0 || px >= W || py >= H) continue;
@@ -71,8 +81,8 @@ var Observer = class Observer {
     }
     ctx.putImageData(this.img, 0, 0);
 
-    // the star
-    const sx = ox, sy = oy;
+    // the star (at its body when it is live, else at the origin)
+    const sx = si >= 0 ? ox + x[si] * sc : ox, sy = si >= 0 ? oy - y[si] * sc : oy;
     const rs = Math.max(4, P.rStar * sc * 0.6);
     const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, rs * 3);
     glow.addColorStop(0, 'rgba(255,240,190,0.9)'); glow.addColorStop(1, 'rgba(255,200,80,0)');

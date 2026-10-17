@@ -9,7 +9,10 @@ steps per frame, or ~40k at 1 step per frame; the WebGPU backend (RTX 3070 Ti) ~
 (see DEVLOG for the benchmarks). Two integrators: fixed-step leapfrog (the default, fast), and a
 hybrid symplectic integrator (exact Kepler orbits + resolved close encounters, MERCURIUS-style)
 for science runs. The science results (Stage 3), their dt-convergence checks (Stages 5–6) and the
-integrator comparison are in `analysis/FINDINGS.md`.
+integrator comparison are in `analysis/FINDINGS.md`. For teaching, the panel has one-click presets
+with known answers: Kepler orbits, Trojans at L4/L5, the Routh criterion, a planet's chaotic zone,
+resonance gaps, Hill stability and Toomre instability. Each shows a live measured-vs-expected readout,
+and `VALIDATION.md` records every benchmark with its tolerance and measured value.
 
 **Live:** https://algorithm0r.github.io/Disk-Accretion/ · **Repo:** https://github.com/algorithm0r/Disk-Accretion
 
@@ -24,15 +27,17 @@ integrator comparison are in `analysis/FINDINGS.md`.
 - **Batches + analysis:** `node sweep.mjs base3k+mass3k+inflation+toomre` (Stage 5: `node sweep.mjs dtconv`), then
   `python analysis/stage3.py`.
 - **Smoke test:** `node smoketest.mjs` — no DB; asserts the conservation invariants (mass, L_z,
-  energy with collisions off, merge conservation, Barnes-Hut vs brute-force force error).
+  energy with collisions off, merge conservation, Barnes-Hut vs brute-force force error) and the
+  fast analytic benchmarks.
+- **Validation:** `node validate.mjs` — the full analytic benchmark suite (VALIDATION.md).
 - **Benchmark:** `node bench.mjs [--spf 4]` — ms/step vs N for brute and Barnes-Hut, and the max N
   at 30 fps; `node bench-pool.mjs` for the worker pool.
 
 ## Layout
 - `src/` — sim core (`engine`, `params`, `world`, `gravity`, `collide`, `observer`,
-  `datamanager`, `charts`, `util`) + `db.js` (vendored standard DB client) + `pool.js` (browser-only
+  `datamanager`, `charts`, `util`, `hybrid`, `presets`) + `db.js` (vendored standard DB client) + `pool.js` (browser-only
   worker pool / WebGPU force providers) + `ui.js`/`main.js` (browser-only, all DOM).
-- `runner.mjs` / `sweep.mjs` / `smoketest.mjs` / `bench.mjs` / `bench-pool.mjs` — headless entry points.
+- `runner.mjs` / `sweep.mjs` / `smoketest.mjs` / `validate.mjs` / `bench.mjs` / `bench-pool.mjs` — headless entry points.
 - `analysis/` — `stage3.py`, `figures/`, `tables.md`, `FINDINGS.md` (run packets in `analysis/runs/`
   are git-ignored; the canonical copies are in MongoDB `diskAccretionDB`, batch_001–014).
 - `DEVPLAN.md` / `DEVLOG.md` — the plan (forward) and the log (backward, append-only).

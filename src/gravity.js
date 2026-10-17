@@ -28,6 +28,27 @@ function bruteForceAccel(x, y, m, n, eps2, ax, ay) {
   }
 }
 
+// ─── massive bodies only (exact) ─────────────────────────────────────────────────────
+// For setups with a few massive bodies (planets, a live star) among many massless test
+// particles: every body sums the softened pull of the massive ones, idx[0..nm). Test particles
+// (m = 0) exert nothing, so this equals brute force at O(N · nm).
+function massiveAccel(x, y, m, n, eps2, ax, ay, idx, nm) {
+  for (let i = 0; i < n; i++) {
+    const xi = x[i], yi = y[i];
+    let axi = 0, ayi = 0;
+    for (let q = 0; q < nm; q++) {
+      const j = idx[q];
+      if (j === i) continue;
+      const dx = x[j] - xi, dy = y[j] - yi;
+      const d2 = dx * dx + dy * dy + eps2;
+      const inv = 1 / Math.sqrt(d2);
+      const f = m[j] * inv * inv * inv;
+      axi += f * dx; ayi += f * dy;
+    }
+    ax[i] = axi; ay[i] = ayi;
+  }
+}
+
 // ─── Barnes-Hut quadtree ──────────────────────────────────────────────────────────
 // Node k is a square (cx, cy, half). Internal nodes own four children stored contiguously
 // at child[k] .. child[k]+3 (quadrant q = east bit | north bit << 1); leaves hold a linked

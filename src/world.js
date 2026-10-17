@@ -47,7 +47,11 @@ var World = class World {
     this.gravityMode = this.P.gravity;
     this.timing = { step: 0, gravity: 0, collide: 0, drift: 0 };   // EMA, ms
 
+    this.starIndex = -1;   // ≥ 0 when the star is a live body (P.liveStar, set by a preset)
     this.initDisk();
+    // a preset (presets.js) may replace the disk with its own setup: test particles, planets, a live star
+    const pre = (typeof PRESETS !== 'undefined' && this.P.preset) ? PRESETS[this.P.preset] : null;
+    if (pre && pre.setup) pre.setup(this);
     this.computeForces();
     this.M0 = this.totalMass();
     this.L0 = this.totalLz();
@@ -118,7 +122,8 @@ var World = class World {
 
   // P.integrator: 'leapfrog' (the fixed-step KDK of Stages 1–5) or 'hybrid' (hybrid.js:
   // Kepler drift + MERCURIUS-style close encounters). Switching rebuilds what the kick needs.
-  get isHybrid() { return this.P.integrator === 'hybrid'; }
+  // (the hybrid's Kepler drift needs the star fixed at the origin, so a live star means leapfrog)
+  get isHybrid() { return this.P.integrator === 'hybrid' && !this.P.liveStar; }
   syncIntegrator() {
     if (this.isHybrid && !this.hybrid) this.hybrid = new HybridIntegrator(this);
     if (this.isHybrid) this.hybrid.recomputeRc();
@@ -148,7 +153,9 @@ var World = class World {
     const t1 = nowMs();
     this.removeEscapers();
     if (P.collisions) {
-      const missed = this.grid.collide(this, dt);
+      const missed = this.gravityMode === 'direct' && this.massIdx
+        ? this.grid.collideMassive(this, dt, this.massIdx, this._nMassive)
+        : this.grid.collide(this, dt);
       if (this.isHybrid) { this.hybrid.stats.missed = missed; this.hybrid.total.missed += missed; }
     }
     if (this.pendingDeaths) this.compact();
@@ -176,7 +183,18 @@ var World = class World {
     const x = this.x, y = this.y, ax = this.ax, ay = this.ay;
     // brute force above bruteMaxN would hang the tab, so it falls back to the tree
     this.gravityMode = (P.gravity === 'brute' && n <= P.bruteMaxN) ? 'brute' : 'bh';
-    if (!P.selfGravity) {
+    // few massive bodies among many massless test particles: sum over the massive ones only (exact)
+    let nMassive = 0;
+    if (P.selfGravity) {
+      if (!this.massIdx || this.massIdx.length < n) this.massIdx = new Int32Array(Math.max(16, n));
+      for (let i = 0; i < n && nMassive <= 64; i++) if (this.m[i] > 0) this.massIdx[nMassive++] = i;
+    }
+    if (P.selfGravity && nMassive <= 64 && nMassive < n) {
+      this.gravityMode = 'direct';
+      this._nMassive = nMassive;
+      massiveAccel(x, y, this.m, n, P.softening * P.softening, ax, ay, this.massIdx, nMassive);
+      this.lastInteractions = n * nMassive;
+    } else if (!P.selfGravity) {
       for (let i = 0; i < n; i++) { ax[i] = 0; ay[i] = 0; }
       this.lastInteractions = 0;
     } else if (this.gravityMode === 'brute') {
@@ -198,7 +216,7 @@ var World = class World {
       if (!this.hybrid) { this.hybrid = new HybridIntegrator(this); }
       if (this.P.selfGravity) this.hybrid.subtractNear();
       else this.hybrid.findCandidates();
-    } else {
+    } else if (!this.P.liveStar) {
       this.addStarAccel();
     }
   }
@@ -240,7 +258,8 @@ var World = class World {
   removeEscapers() {
     const P = this.P, n = this.n;
     const x = this.x, y = this.y, vx = this.vx, vy = this.vy, m = this.m, dead = this.dead;
-    const rs2 = P.rStar * P.rStar, re2 = P.rEject * P.rEject;
+    // with a live star, falling in is a collision with the star body, found by the grid
+    const rs2 = P.liveStar ? -1 : P.rStar * P.rStar, re2 = P.rEject * P.rEject;
     for (let i = 0; i < n; i++) {
       if (dead[i]) continue;
       const r2 = x[i] * x[i] + y[i] * y[i];
@@ -272,6 +291,7 @@ var World = class World {
         x[w] = x[i]; y[w] = y[i]; vx[w] = vx[i]; vy[w] = vy[i]; ax[w] = ax[i]; ay[w] = ay[i];
         m[w] = m[i]; r[w] = r[i]; spin[w] = spin[i];
         if (rc) rc[w] = rc[i];
+        if (this.tag) this.tag[w] = this.tag[i];
       }
       dead[w] = 0;
       w++;
@@ -309,7 +329,7 @@ var World = class World {
     let K = 0, U = 0;
     for (let i = 0; i < n; i++) {
       K += 0.5 * m[i] * (vx[i] * vx[i] + vy[i] * vy[i]);
-      U -= m[i] / Math.sqrt(x[i] * x[i] + y[i] * y[i]);
+      if (!this.P.liveStar) U -= m[i] / Math.sqrt(x[i] * x[i] + y[i] * y[i]);
       if (this.P.selfGravity) {
         for (let j = i + 1; j < n; j++) {
           const dx = x[j] - x[i], dy = y[j] - y[i];
@@ -325,6 +345,7 @@ var World = class World {
     const m = this.m, n = this.n, m0 = this.m0;
     let maxM = 0, nBig = 0, sum = 0;
     for (let i = 0; i < n; i++) {
+      if (i === this.starIndex) continue;
       const mi = m[i];
       sum += mi;
       if (mi > maxM) maxM = mi;
@@ -341,8 +362,8 @@ var World = class World {
       diskMass: sum,
       massAccreted: this.massAccreted,
       massEjected: this.massEjected,
-      massError: (this.totalMass() - this.M0) / this.M0,
-      LzDrift: (this.totalLz() - this.L0) / this.L0,
+      massError: this.M0 > 0 ? (this.totalMass() - this.M0) / this.M0 : 0,
+      LzDrift: this.L0 !== 0 ? (this.totalLz() - this.L0) / this.L0 : 0,
       merges: this.nMerges,
       msStep: this.timing.step,
       msGravity: this.timing.gravity,

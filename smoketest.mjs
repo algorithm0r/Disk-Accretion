@@ -24,7 +24,7 @@ import path from 'path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const indirectEval = eval; // aliased → runs in the global (sloppy) realm, so `var` leaks to globalThis
-for (const f of ['util.js', 'params.js', 'gravity.js', 'collide.js', 'hybrid.js', 'world.js']) {
+for (const f of ['util.js', 'params.js', 'gravity.js', 'collide.js', 'hybrid.js', 'world.js', 'presets.js']) {
   let src = readFileSync(path.join(__dirname, 'src', f), 'utf8');
   src = src.replace(/^\s*(['"])use strict\1;?/, ''); // strip directive so declarations leak to global
   indirectEval(src);
@@ -248,6 +248,26 @@ check('bh: N non-increasing, bodies grow', bh.monotone && bh.s.n < 3000 && bh.s.
     for (let s = 0; s < Math.round(2 * TAU / w.P.dt); s++) { w.step(); if (s % 50 === 0) worst = Math.max(worst, Math.abs((w.totalEnergy() - E0) / E0)); }
     check('hybrid: no collisions, self-gravity |dE/E| < 1e-7 at dt = 0.01 (leapfrog 1.8e-4)', worst < 1e-7, 'worst ' + e_(worst));
   }
+}
+
+// ─── 8. analytic benchmarks, fast versions (presets.js; full set: node validate.mjs) ───────
+{
+  const t = (id, over, orbits, every) => runPreset(id, over, orbits, every);
+  const kep = t('kepler', { integrator: 'hybrid' }, 20);
+  check('benchmark Kepler (hybrid): energy, apse and period exact', kep.pass, kep.text);
+  const tro = t('trojans', {}, 40, 2);
+  check('benchmark Trojans (live star): small tadpoles librate about ±60° within 0.5°', tro.pass, tro.text);
+  const pin = t('trojans', { liveStar: false }, 40, 2);
+  check('benchmark Trojans (pinned star): no tadpoles at all — L4/L5 need the star\'s reflex motion',
+    pin.measured.tadpoles === 0, pin.text);
+  const gap = t('gap', { N: 602 }, 300, 10);
+  check('benchmark chaotic zone (μ = 1e-3, 300 orbits): inner half-width within 25% of 1.3 μ^{2/7}', gap.pass, gap.text);
+  const h1 = t('hill', { hillDelta: 2.5 }, 100, 2), h2 = t('hill', { hillDelta: 4.0 }, 300, 2);
+  check('benchmark Hill stability: Δ = 2.5 R_H meets, Δ = 4.0 R_H never does (Gladman edge 2√3)',
+    h1.measured.encounter && !h2.measured.encounter, h1.text + ' | ' + h2.text);
+  const r1 = t('routh', { planetMass: 0.03 }, 100), r2 = t('routh', { planetMass: 0.045 }, 100);
+  check('benchmark Routh: L4 linearly stable at m = 0.03, unstable at m = 0.045 (critical μ = m/(M★+m) = 0.0385)',
+    r1.measured.stable && !r2.measured.stable, r1.text + ' | ' + r2.text);
 }
 
 console.log(failures ? 'smoke: FAIL (' + failures + ')' : 'smoke: PASS');

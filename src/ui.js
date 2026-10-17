@@ -23,6 +23,7 @@ function buildControls() {
   for (const spec of PARAM_SCHEMA) {
     const wrap = document.createElement('label');
     wrap.className = 'ctl';
+    if (spec.presets) { wrap.dataset.presets = spec.presets.join(' '); if (!spec.presets.includes(PARAMETERS.preset)) wrap.style.display = 'none'; }
     const head = document.createElement('div');
     head.className = 'ctl-head';
     const name = document.createElement('span');
@@ -80,6 +81,51 @@ function buildControls() {
   }
 }
 
+// ─── presets (presets.js): picker, explainer, measured vs expected ──────────────────────
+function buildPresetPicker() {
+  const sel = document.getElementById('presetSel');
+  for (const id in PRESETS) {
+    const op = document.createElement('option');
+    op.value = id; op.textContent = PRESETS[id].label;
+    sel.appendChild(op);
+  }
+  sel.value = PARAMETERS.preset;
+  sel.onchange = () => applyPreset(sel.value);
+  showPresetInfo();
+}
+
+// a preset's params go over the untouched defaults (not over the previous preset's), then rebuild
+function applyPreset(id) {
+  const keepBackend = PARAMETERS.backend;
+  const fresh = JSON.parse(JSON.stringify(DEFAULT_PARAMETERS));
+  for (const k in PARAMETERS) delete PARAMETERS[k];
+  Object.assign(PARAMETERS, fresh, PRESETS[id].params, { preset: id, backend: keepBackend });
+  document.getElementById('presetSel').value = id;
+  document.getElementById('controls').innerHTML = '';
+  CONTROL_SYNC = {};
+  buildControls();
+  showPresetInfo();
+  reset();
+  resetView();
+}
+
+function showPresetInfo() {
+  document.getElementById('presetInfo').textContent = PRESETS[PARAMETERS.preset].explainer;
+}
+
+function refreshPresetResult() {
+  const box = document.getElementById('presetResult');
+  if (!presetTracker || !world) { box.textContent = ''; return; }
+  const r = presetVerdict(PARAMETERS.preset, world, presetTracker.result(world));
+  box.textContent = r.text;
+  box.className = r.pass === true ? 'pass' : (r.pass === false ? 'fail' : '');
+  box.title = 'expected: ' + r.expected;
+}
+
+function toggleAbout(show) {
+  document.getElementById('about').style.display = show ? 'flex' : 'none';
+}
+
 // ─── readouts ───────────────────────────────────────────────────────────────────────
 var READOUT_ROWS = [
   ['N alive', (s) => s.n.toLocaleString() + ' / ' + Math.round(PARAMETERS.N).toLocaleString()],
@@ -112,6 +158,7 @@ function buildReadouts() {
 
 function refreshReadouts() {
   if (!world) return;
+  refreshPresetResult();
   const s = world.stats();
   const vals = document.querySelectorAll('#readouts .ro-val');
   READOUT_ROWS.forEach(([, f], i) => { vals[i].textContent = f(s); });

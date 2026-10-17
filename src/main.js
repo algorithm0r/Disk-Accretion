@@ -3,6 +3,7 @@
 // current PARAMETERS; the boot sequence is straight — no AssetManager gate.
 var gameEngine, world, observer, dataManager, db, graphs;
 var provider = null;   // async body-body force provider for the 'workers' / 'gpu' backends
+var presetTracker = null;   // the current preset's measurement (presets.js), fed every few steps
 
 // swap the force backend; the provider outlives resets, so a rebuild keeps it
 async function setBackend(kind) {
@@ -48,6 +49,12 @@ function reset() {
   gameEngine.add(dataManager);
   gameEngine.add(graphs.n);
   gameEngine.add(graphs.maxMass);
+  const pre = PRESETS[PARAMETERS.preset];
+  presetTracker = pre ? new pre.Tracker() : null;
+  if (presetTracker) {
+    presetTracker.track(world);
+    gameEngine.add({ update: () => { if (world.steps % 5 === 0) presetTracker.track(world); } });
+  }
   setStatus(world.n.toLocaleString() + ' bodies, m₀ = ' + (world.m0 / M_EARTH).toExponential(2) + ' M⊕');
 }
 
@@ -55,6 +62,7 @@ window.onload = function () {
   const canvas = document.getElementById('gameWorld');
   gameEngine = new GameEngine();
   gameEngine.init(canvas.getContext('2d'));
+  buildPresetPicker();
   buildControls();
   buildReadouts();
   fitCanvas();

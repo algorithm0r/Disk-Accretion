@@ -293,3 +293,21 @@ resolved at 0.14 ± 0.02. Two residual flags (f = 10 final e, f = 3 t½ ±2%) ha
 - [ ] Hybrid speed: the changeover set holds ~half the bodies of the dense early disk; a cheaper
       encounter integrator or a mass-dependent r_c for small bodies could make it a browser default
 **Done when:** every headline in FINDINGS rests on hybrid runs that converge across dt.
+
+### Stage 8 — Analytic benchmarks as teaching presets  [ ACTIVE ]
+(Added 2026-10-16, approved by Chris: "yes, let's do that". Runs before Stage 7, which stays parked.)
+Why: our *verification* is strong (conservation laws, force error, dt convergence), but our external
+*validation* was only loose agreement with textbook results. So: setups with exact known answers,
+each a one-click preset students can watch, each with a measured-vs-analytic check and an explicit
+tolerance, recorded in VALIDATION.md (setup, reference, tolerance; dated amendments appended).
+- [ ] Massless test particles (m = 0: feel gravity, exert none, never touch each other) and an exact
+      massive-bodies-only force sum / collision check for few-massive setups
+- [ ] Live-star option (star = body 0, barycentric, leapfrog only): the pinned star drops the
+      indirect term, which (found 2026-10-16) removes L4/L5 entirely, not just shifts them at O(μ)
+- [ ] Presets with trackers (`src/presets.js`), shared by the panel, smoketest.mjs and validate.mjs:
+      Kepler, Trojans, Routh, chaotic zone, Kirkwood-like gaps, Hill stability, Toomre, the default disk
+- [ ] Panel: preset picker, explainers, live "measured vs expected" (with a minimum run length before
+      a verdict), About panel (what the model simplifies), link to VALIDATION.md
+- [ ] Fast checks in smoketest.mjs; slow ones in validate.mjs → VALIDATION.md table, DEVLOG numbers
+**Done when:** every benchmark has a measured value against its reference with a stated tolerance in
+VALIDATION.md, the fast ones run in the smoketest, and the presets load and run on the live page.

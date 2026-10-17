@@ -357,3 +357,8 @@ over-ejection, by the pattern in item 1).
 - Seeds: 8 for the default disk (at each of the three dt, both integrators), 4 per inflation config
   under leapfrog and 8 per hot config under the hybrid (at each dt), and 2 per disk-mass point. The sweep tables show each seed (a/b/…), so the scatter is visible.
 - Spacing uses bodies with k ≥ max(30 m₀, 5% of the largest), bound orbits inside r = 5.
+- The star is pinned (an external potential) in every disk run here. Stage 8 (VALIDATION.md §2)
+  found this removes the triangular Lagrange points entirely, because the star's reflex motion
+  (the indirect term) is what balances the planet's pull at L4/L5. Close encounters are
+  unaffected, but co-orbital (Trojan-like) configurations among oligarchs cannot form in these
+  runs. The live-star option (`liveStar`) restores them; it is leapfrog-only.

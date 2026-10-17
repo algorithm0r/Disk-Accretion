@@ -35,6 +35,15 @@
   for science runs). In the hybrid, a body's changeover radius `rc` must not change inside a
   step (it changes only at creation and merges), the kick uses the gradient of the split
   *potential* (not K·F), and encounter groups honour `collisions: false`.
+- **Presets and benchmarks** (`src/presets.js`, sim core, loaded headless too): each preset is a
+  setup plus a Tracker. The panel readout, `smoketest.mjs` (fast checks) and `validate.mjs`
+  (slow suite → `VALIDATION.md`, `analysis/validation_table.md`) use the same code, so change a
+  benchmark in one place. Test particles are bodies with m = 0 (they feel gravity, exert none and
+  have r = 0). With ≤ 64 massive bodies, gravity and collisions use an exact massive-only sum
+  (`gravityMode 'direct'`). `liveStar: true` makes the star body 0 (barycentric) and forces
+  leapfrog (the hybrid's Kepler drift needs a fixed star). The pinned star has no L4/L5 at all:
+  keep the Trojan, Routh, gap and Kirkwood presets on the live star. Routh's μ is m/(M★+m).
+  VALIDATION.md's results table is never edited in place; append dated amendments.
 - **Model/view split:** the world holds state and never draws; the `Observer` renders it.
 - **Config:** one `PARAMETERS` global (`params.js`), serialized verbatim into every saved
   packet. `PARAM_SCHEMA` drives the control panel.
@@ -65,6 +74,8 @@ tokens and a `**Done when:**` criterion. `/log-session` rewrites STATUS — don'
   `analysis/FINDINGS.md` ties each claim to its figure and command. Runs are fast (the disk
   thins out): a 10k-body 3000-orbit run takes ~2.5 min.
 - Smoke (no DB): `node smoketest.mjs` — prints the numbers that go in the DEVLOG entry.
+- Validation: `node validate.mjs [section …]` (~8 min, sections in parallel) — the analytic
+  benchmarks table for VALIDATION.md.
 - Benchmark: `node bench.mjs --spf 4` (and `--spf 1`) — max N at 30 fps, brute vs Barnes-Hut;
   `node bench-pool.mjs` — the worker pool's scaling, headless (same worker code). The GPU path
   can only be timed in the browser.

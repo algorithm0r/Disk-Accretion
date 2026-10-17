@@ -40,6 +40,13 @@ var PARAMETERS = {
   backend: 'cpu',       // 'cpu' (main thread) | 'workers' (pool over the grouped walk) | 'gpu' (WebGPU all-pairs)
   workers: 4,           // pool size for the 'workers' backend (4 is the measured optimum; see DEVLOG)
 
+  // --- presets (presets.js; the defaults below are the plain disk) ---
+  preset: 'disk',       // which setup reset() builds
+  liveStar: false,      // true: the star is a moving body (barycentric), so its reflex motion is in
+  planetMass: 1e-3,     // planet presets: planet mass in star masses (μ)
+  planetEcc: 0,         // planet presets: planet eccentricity
+  hillDelta: 3.0,       // hill preset: planet separation in mutual Hill radii
+
   // --- engine ---
   stepsPerFrame: 4,     // sim steps per rendered frame
   bruteMaxN: 20000,     // brute force refuses to start above this N (it would hang the tab)
@@ -62,12 +69,17 @@ var PARAMETERS = {
 // Schema drives the auto-generated control panel (ui.js). One entry per live-tunable.
 //   log: slider moves in log10 space    resets: changing it rebuilds the disk
 //   options: renders a <select>         type 'bool': renders a checkbox
+//   presets: shown only for those presets (presets.js)
 var PARAM_SCHEMA = [
-  { key: 'N', label: 'Bodies N', min: 100, max: 200000, log: true, round: true, resets: true },
-  { key: 'diskMass', label: 'Disk mass', min: 1e-4, max: 0.1, log: true, resets: true },
-  { key: 'dispersion', label: 'Velocity dispersion', min: 0, max: 0.1, step: 0.001, resets: true },
-  { key: 'radiusInflation', label: 'Radius inflation', min: 1, max: 300, log: true, live: 'radii' },
-  { key: 'stepsPerFrame', label: 'Steps / frame', min: 1, max: 40, step: 1 },
+  { key: 'planetMass', label: 'Planet mass μ (star = 1)', min: 1e-5, max: 0.06, log: true, resets: true, presets: ['trojans', 'routh', 'gap', 'kirkwood'] },
+  { key: 'planetEcc', label: 'Planet eccentricity', min: 0, max: 0.3, step: 0.01, resets: true, presets: ['kirkwood'] },
+  { key: 'hillDelta', label: 'Separation Δ (mutual Hill radii)', min: 1.5, max: 6, step: 0.05, resets: true, presets: ['hill'] },
+  { key: 'liveStar', label: 'Live star (moves; barycentric)', type: 'bool', resets: true, presets: ['trojans', 'routh', 'gap', 'kirkwood'] },
+  { key: 'N', label: 'Bodies N', min: 100, max: 200000, log: true, round: true, resets: true, presets: ['disk', 'toomre'] },
+  { key: 'diskMass', label: 'Disk mass', min: 1e-4, max: 0.1, log: true, resets: true, presets: ['disk', 'toomre'] },
+  { key: 'dispersion', label: 'Velocity dispersion', min: 0, max: 0.1, step: 0.001, resets: true, presets: ['disk', 'toomre'] },
+  { key: 'radiusInflation', label: 'Radius inflation', min: 1, max: 300, log: true, live: 'radii', presets: ['disk', 'toomre'] },
+  { key: 'stepsPerFrame', label: 'Steps / frame', min: 1, max: 400, log: true, round: true },
   { key: 'theta', label: 'θ (Barnes-Hut)', min: 0, max: 1.5, step: 0.05 },
   { key: 'dt', label: 'dt', min: 0.001, max: 0.03, step: 0.001 },
   { key: 'integrator', label: 'Integrator', options: ['leapfrog', 'hybrid'] },
@@ -76,3 +88,6 @@ var PARAM_SCHEMA = [
   { key: 'selfGravity', label: 'Self-gravity', type: 'bool' },
   { key: 'collisions', label: 'Collisions', type: 'bool' },
 ];
+
+// the untouched defaults: a preset's params are applied over these, never over another preset's
+var DEFAULT_PARAMETERS = JSON.parse(JSON.stringify(PARAMETERS));

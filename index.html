@@ -23,6 +23,15 @@
     .ctl input[type=range], .ctl select { width: 100%; }
     .ctl select { background: #1b212b; color: #cdd2da; border: 1px solid #2a313c; border-radius: 4px; padding: 2px; margin-top: 3px; }
     #status { font-size: 11px; color: #8a8f98; margin-top: 4px; }
+    #presetSel { width: 100%; background: #1b212b; color: #cdd2da; border: 1px solid #2a313c; border-radius: 4px; padding: 4px; font-size: 13px; }
+    #presetInfo { font-size: 11.5px; color: #aab1bb; line-height: 1.45; margin: 6px 0; }
+    #presetResult { font-size: 12px; background: #0d1117; border: 1px solid #222832; border-left: 3px solid #4a5260; border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; line-height: 1.4; }
+    #presetResult:empty { display: none; }
+    #presetResult.pass { border-left-color: #3fb26b; }
+    #presetResult.fail { border-left-color: #e5534b; }
+    #about { position: fixed; inset: 0; background: rgba(5,7,10,0.75); display: none; align-items: center; justify-content: center; z-index: 10; }
+    #about .card { background: #11151c; border: 1px solid #2a313c; border-radius: 10px; max-width: 620px; max-height: 85vh; overflow-y: auto; padding: 18px 22px; font-size: 13.5px; line-height: 1.55; }
+    #about h4 { margin: 0 0 8px; } #about li { margin: 5px 0; } #about a { color: #9fc4ff; }
     canvas { background: #0b0e13; display: block; cursor: grab; }
   </style>
 </head>
@@ -31,16 +40,46 @@
     <h3>Disk Accretion</h3>
     <div class="sub">A disk of bodies around a star: 1/r² gravity (Barnes-Hut), leapfrog,
       perfect merging on contact. Scroll to zoom, drag to pan, double-click to re-centre, space to pause.</div>
+    <select id="presetSel" title="One-click setups, each with a known answer"></select>
+    <div id="presetInfo"></div>
+    <div id="presetResult" title=""></div>
     <div class="btns">
       <button onclick="reset()">Reset</button>
       <button id="pauseBtn" class="alt" onclick="togglePause()">Pause</button>
       <button class="alt" onclick="resetView()">Fit view</button>
+      <button class="alt" onclick="toggleAbout(true)">About</button>
     </div>
     <div id="readouts"></div>
     <div id="status"></div>
     <div id="controls"></div>
   </div>
   <canvas id="gameWorld" width="800" height="600"></canvas>
+  <div id="about" onclick="if (event.target === this) toggleAbout(false)">
+    <div class="card">
+      <h4>What this model simplifies</h4>
+      <ul>
+        <li><b>2D.</b> Bodies move in a plane, but gravity falls off as 1/r² (a thin 3D disk, not "flatland" gravity). With no
+          vertical dimension, close encounters end in contact more often than in 3D.</li>
+        <li><b>Pinned star by default.</b> The star is a fixed point that pulls but is never pulled back. That drops the
+          "indirect term" (the star's reflex motion toward its planets). It hardly matters for close encounters, but it removes
+          the Lagrange points L4/L5 entirely: Trojans exist only with the <i>Live star</i> option, which the Trojan, Routh,
+          chaotic-zone and resonance presets use.</li>
+        <li><b>No gas.</b> Real disks are mostly gas at first. Without it there are no gas giants, no gas drag damping orbits and
+          no planet migration, and the asteroid belt is not stirred by a forming Jupiter.</li>
+        <li><b>Perfect merging.</b> Bodies that touch always stick and conserve mass and momentum; nothing shatters or bounces.</li>
+        <li><b>Radius inflation.</b> In the disk presets bodies collide as if ~30× larger than their density implies, so growth
+          takes minutes instead of millions of years. That changes how often close passes merge rather than scatter
+          (FINDINGS §3 and §6).</li>
+        <li><b>Two integrators.</b> Leapfrog (default, fast) and a hybrid symplectic one (exact Kepler orbits plus resolved close
+          encounters, for science runs).</li>
+      </ul>
+      <p>Each preset checks the simulation against a known answer. The full list, with tolerances and measured values, is in
+        <a href="https://github.com/algorithm0r/Disk-Accretion/blob/main/VALIDATION.md" target="_blank" rel="noopener">VALIDATION.md</a>;
+        the science results are in
+        <a href="https://github.com/algorithm0r/Disk-Accretion/blob/main/analysis/FINDINGS.md" target="_blank" rel="noopener">FINDINGS.md</a>.</p>
+      <button onclick="toggleAbout(false)">Close</button>
+    </div>
+  </div>
 
   <!-- socket.io client (for the standard DB client in socket mode) -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
@@ -53,6 +92,7 @@
   <script src="src/collide.js"></script>
   <script src="src/hybrid.js"></script>
   <script src="src/world.js"></script>
+  <script src="src/presets.js"></script>
   <script src="src/pool.js"></script>
   <script src="src/observer.js"></script>
   <script src="src/charts.js"></script>
