@@ -13,3 +13,4 @@ data/
 analysis/runs/
 analysis/logs/
 analysis/*.out
+analysis/*.err
