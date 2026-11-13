@@ -1,6 +1,75 @@
 # Disk Accretion — DEVLOG
 Newest entry on top. **Append only — never edit past entries.**
 
+## 2026-11-13 — Stage 9: the page on Claude Basic; the first 30 seconds
+
+**Done:** Stage 9, closed. Brief from the hub session (Chris is showing the sim to two incoming
+grad students as a possible TCSS 600 "build a solar system" simulation-game project): adopt Claude
+Basic and finish the front-end presentation, with no model changes. Publishing approved mid-session,
+relayed by the hub: "all can go public".
+- **Claude Basic 0.6.0** vendored in `vendor/` (byte-identical to Flea Jumping's pinned copy).
+  The page follows the kit's sim rules:
+  - The world is on the left, and the scenario card and live charts are on the right. Under 1100 px
+    the card goes above the world.
+  - Under the world: a dial (one turn = one orbit at 1 AU = a year), the run buttons, a key of
+    marks with names, then two control strips, Physics and Engine.
+  - The 12-row table of changing numbers and the two in-canvas graphs (`charts.js`, deleted) are
+    replaced by line charts: bodies left, largest body (Earth masses), compute per step (whole,
+    gravity, collisions, drawing), fps, and angular momentum conserved to N digits.
+- **Scenario card:**
+  - a grouped picker: "Build a solar system" (disk, Toomre) and "Check the physics against a known
+    answer" (the six benchmarks);
+  - the explainer;
+  - "Measured against theory": expected, measured, and a badge (measuring, with progress /
+    matches theory / does not match / compare by eye).
+- **Controls:**
+  - every control has a hover tip (`PARAM_SCHEMA.tip`) and a clearer label;
+  - the fading-inflation exponent q is now a disk control (default 0, unchanged);
+  - `index.html#<preset>` opens on a scenario.
+- **World colours** are resolved from theme tokens (`worldColors()`), so all four themes draw it.
+  The legend uses the same CSS expressions. `observer.js` takes the colours in (no raw colours).
+- **Opening-scenario recommendation** (the hub's open question): keep the default disk, with
+  constant inflation.
+  - The disk is the pitch, and it is the most alive picture in the first 30 s: N falls from 10k to
+    a few thousand, and bodies visibly grow.
+  - Trojans is the scenario to switch to for "matches theory". It passes ~28 s after selecting it.
+- **Fading inflation as default: no.**
+  - The disk's check quotes evidence measured with constant inflation.
+  - It would change the headless default.
+  - What it buys (more ejections, 23 per run converged) starts at ~220 orbits. At ~0.2–0.4 orbits/s
+    of viewing (4 steps/frame, dt 0.01, 30–60 fps; derived, not timed), that is over 10 minutes
+    in, after the demo's first look. The early growth looks the same either way.
+  - The q slider lets it be shown on demand.
+
+**Changed:**
+- `index.html`, `src/ui.js`, `src/main.js` rewritten. `src/observer.js` takes colours from ui.js.
+  `src/params.js` schema: `group`, `tip`, labels, the `inflationRamp` control.
+- `src/presets.js`: `presetVerdict` adds `measuring`, `orbits` and `minOrbits` (additive); the
+  Trojans explainer says "Switch off". `src/datamanager.js`: comment only.
+- `src/charts.js` deleted (browser-only; nothing headless loaded it).
+- Docs: README (kit, `#preset` links, layout), CLAUDE.md (UI-kit rule), DEVPLAN Stage 9 and a
+  new Backlog.
+- Kit gaps written for the kit's repo (not patched here; in the session-group notes folder,
+  `claude-basic-gaps-from-disk-accretion.md`):
+  - `CB.sim.controls` has no log sliders, formatting, tips or sync, so `ui.js` builds the same
+    markup itself;
+  - `.cb-progress` ignores `hidden`;
+  - one theme key is shared by every app on localhost:8000.
+
+**State:**
+- smoke PASS: 28 checks, the same count as HEAD before the session. validate PASS in 7.9 min
+  through `cpuslot`. The table is identical to 2026-10-17 except the date. Both @ 1abeac9-dirty.
+- Browser pane (localhost:8000), all 8 scenarios cycled with no console errors. Trojans reaches
+  "matches theory" at 42 years (60.05° / −60.05°). The disk peaks at 40× at year 19.
+- At 1280×800 the world, card, check, dial, buttons and key all fit above the fold (bar bottom at
+  782 px). Also checked at 1600×900 and at 1024 (one column), and in the Basic and Paper themes.
+- The pane was hidden for most of the session, so real-time fps was not timed in the page.
+- Found in passing, not fixed: `src/db.js:69` `io = root.io` (root is out of scope). Browser
+  socket saves would fail; `autoSave` is off, so the demo never saves.
+
+**Next:** Chris's call: Stage 7 (parked), or the Backlog's kit and db.js items. Watch real fps in a
+visible browser at the demo.
+
 ## 2026-10-16 — Stage 8: analytic benchmarks as teaching presets (VALIDATION.md)
 
 **Done:** Stage 8, closed. Chris approved it ("yes, let's do that"), relayed from the PA session.

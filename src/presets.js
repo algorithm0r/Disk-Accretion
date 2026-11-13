@@ -204,7 +204,7 @@ var PRESETS = {
     label: 'Trojans: Lagrange points L4 / L5',
     explainer: 'A Jupiter-mass planet (μ = 0.001) and swarms of massless particles sharing its orbit. Particles near ' +
       'the points 60° ahead (L4) and behind (L5) librate around them on tadpole orbits; others swap ends on horseshoe ' +
-      'orbits. The readout is the measured libration centre. Untick "Live star" to see why the star must move: with a ' +
+      'orbits. The readout is the measured libration centre. Switch off "Live star" to see why the star must move: with a ' +
       'pinned star the Lagrange points do not exist.',
     params: { N: 202, liveStar: true, planetMass: 1e-3, radiusInflation: 1, rStar: 0.01, integrator: 'leapfrog', dt: 0.005, stepsPerFrame: 60 },
     minOrbits: 40,
@@ -467,7 +467,8 @@ var PRESETS = {
 function presetVerdict(id, w, r) {
   const pre = PRESETS[id], orbits = w.t / TAU, min = pre.minOrbits || 0;
   if (orbits >= min || (pre.ready && pre.ready(w, r))) return r;
-  return Object.assign({}, r, { text: 'measuring… ' + orbits.toFixed(0) + ' / ' + min + ' orbits. So far: ' + r.text, pass: null });
+  return Object.assign({}, r, { text: 'measuring… ' + orbits.toFixed(0) + ' / ' + min + ' orbits. So far: ' + r.text, pass: null,
+    measuring: true, orbits: orbits, minOrbits: min });
 }
 
 // Headless helper (smoketest.mjs, validate.mjs): build the preset's world with params over the

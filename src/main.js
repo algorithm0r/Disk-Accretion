@@ -1,7 +1,7 @@
 'use strict';
 // Browser entry + wiring (not loaded headlessly). reset() rebuilds the disk from the
 // current PARAMETERS; the boot sequence is straight — no AssetManager gate.
-var gameEngine, world, observer, dataManager, db, graphs;
+var gameEngine, world, observer, dataManager, db, uiPump;
 var provider = null;   // async body-body force provider for the 'workers' / 'gpu' backends
 var presetTracker = null;   // the current preset's measurement (presets.js), fed every few steps
 
@@ -13,20 +13,12 @@ async function setBackend(kind) {
     else if (kind === 'gpu') provider = await GpuGravity.create();
   } catch (e) {
     // e.g. no WebGPU in this browser, or Workers blocked: fall back to the main thread
-    setStatus('backend ' + kind + ' unavailable: ' + e.message + ' (using cpu)');
+    notify('The ' + kind + ' backend is not available here', e.message + ' Using the cpu.');
     PARAMETERS.backend = 'cpu';
     provider = null;
-    if (typeof syncControl === 'function') syncControl('backend');
+    syncControl('backend');
   }
   if (world) world.provider = provider;
-}
-
-// the two live graphs sit in the canvas's lower-left corner
-function placeGraphs() {
-  if (!graphs) return;
-  const H = gameEngine.ctx.canvas.height;
-  graphs.n.x = 10; graphs.n.y = H - 170;
-  graphs.maxMass.x = 10; graphs.maxMass.y = H - 85;
 }
 
 function reset() {
@@ -34,37 +26,38 @@ function reset() {
   gameEngine.clear();
   world = new World(PARAMETERS);
   world.provider = provider;
-  observer = new Observer(world);
+  observer = new Observer(world, worldColors());
   if (view) observer.view = view;
-  graphs = {
-    n: new LineGraph(10, 0, 220, 75, 'log₁₀ N alive'),
-    maxMass: new LineGraph(10, 0, 220, 75, 'log₁₀ largest / m₀'),
-  };
-  placeGraphs();
   db = createDB(PARAMETERS.db);
-  dataManager = new DataManager(world, db, graphs);
+  dataManager = new DataManager(world, db);
   dataManager.sample();
   gameEngine.add(world);
   gameEngine.add(observer);
   gameEngine.add(dataManager);
-  gameEngine.add(graphs.n);
-  gameEngine.add(graphs.maxMass);
   const pre = PRESETS[PARAMETERS.preset];
   presetTracker = pre ? new pre.Tracker() : null;
   if (presetTracker) {
     presetTracker.track(world);
     gameEngine.add({ update: () => { if (world.steps % 5 === 0) presetTracker.track(world); } });
   }
-  setStatus(world.n.toLocaleString() + ' bodies, m₀ = ' + (world.m0 / M_EARTH).toExponential(2) + ' M⊕');
+  uiPump = new UiPump();
+  gameEngine.add(uiPump);
+  refreshCheck();
+  refreshEngineNote();
+  const isDisk = PARAMETERS.preset === 'disk' || PARAMETERS.preset === 'toomre';
+  setStatus(world.n.toLocaleString() + ' bodies' + (isDisk ? ', each starting at ' + fmtNum(world.m0 / M_EARTH) + ' Earth masses' : '') + '.');
 }
 
 window.onload = function () {
-  const canvas = document.getElementById('gameWorld');
+  $('themePicker').appendChild(CB.theme.picker());
+  const canvas = $('gameWorld');
   gameEngine = new GameEngine();
   gameEngine.init(canvas.getContext('2d'));
+  // a link can name the scenario: index.html#trojans
+  const fromHash = decodeURIComponent(location.hash.slice(1));
+  if (PRESETS[fromHash]) Object.assign(PARAMETERS, PRESETS[fromHash].params, { preset: fromHash });
   buildPresetPicker();
   buildControls();
-  buildReadouts();
   fitCanvas();
   wireView();
   reset();

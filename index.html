@@ -1,103 +1,169 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Disk Accretion</title>
-  <style>
-    html, body { height: 100%; overflow: hidden; }
-    body { margin: 0; background: #11151c; color: #cdd2da; font-family: system-ui, sans-serif; display: flex; }
-    #controlPanel { width: 290px; flex: none; padding: 12px 14px; box-sizing: border-box; height: 100vh; overflow-y: auto; border-right: 1px solid #222832; }
-    #controlPanel h3 { margin: 0 0 4px; }
-    .sub { font-size: 11px; color: #8a8f98; margin-bottom: 10px; line-height: 1.4; }
-    .btns { display: flex; gap: 6px; margin-bottom: 10px; }
-    button { background: #2b6cf6; color: #fff; border: 0; border-radius: 6px; padding: 5px 11px; cursor: pointer; font-size: 13px; }
-    button.alt { background: #2a313c; }
-    #readouts { font-size: 12px; background: #0d1117; border: 1px solid #222832; border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; }
-    .ro { display: flex; justify-content: space-between; gap: 8px; padding: 1.5px 0; }
-    .ro span:first-child { color: #8a8f98; white-space: nowrap; }
-    .ro-val { text-align: right; font-variant-numeric: tabular-nums; }
-    .ctl { display: block; margin: 9px 0; font-size: 12.5px; }
-    .ctl-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-    .ctl-bool .ctl-head { justify-content: flex-start; }
-    .ctl-val { color: #9fc4ff; font-variant-numeric: tabular-nums; }
-    .ctl input[type=range], .ctl select { width: 100%; }
-    .ctl select { background: #1b212b; color: #cdd2da; border: 1px solid #2a313c; border-radius: 4px; padding: 2px; margin-top: 3px; }
-    #status { font-size: 11px; color: #8a8f98; margin-top: 4px; }
-    #presetSel { width: 100%; background: #1b212b; color: #cdd2da; border: 1px solid #2a313c; border-radius: 4px; padding: 4px; font-size: 13px; }
-    #presetInfo { font-size: 11.5px; color: #aab1bb; line-height: 1.45; margin: 6px 0; }
-    #presetResult { font-size: 12px; background: #0d1117; border: 1px solid #222832; border-left: 3px solid #4a5260; border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; line-height: 1.4; }
-    #presetResult:empty { display: none; }
-    #presetResult.pass { border-left-color: #3fb26b; }
-    #presetResult.fail { border-left-color: #e5534b; }
-    #about { position: fixed; inset: 0; background: rgba(5,7,10,0.75); display: none; align-items: center; justify-content: center; z-index: 10; }
-    #about .card { background: #11151c; border: 1px solid #2a313c; border-radius: 10px; max-width: 620px; max-height: 85vh; overflow-y: auto; padding: 18px 22px; font-size: 13.5px; line-height: 1.55; }
-    #about h4 { margin: 0 0 8px; } #about li { margin: 5px 0; } #about a { color: #9fc4ff; }
-    canvas { background: #0b0e13; display: block; cursor: grab; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Disk Accretion</title>
+<!-- Claude Basic, vendored and pinned (0.6.0; see DEVLOG). Never edit vendor/: fix the kit upstream. -->
+<link rel="stylesheet" href="vendor/claude-basic.css">
+<script src="vendor/claude-basic.js"></script>
+<style>
+  /* page-level layout only; every colour is a kit token */
+  .top { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; padding: 14px var(--cb-gap) 0; }
+  .top h1 { margin: 0; font-size: 20px; }
+  .top .note { color: var(--cb-muted); font-size: 13px; max-width: 70ch; }
+  .top .spacer { flex: 1; }
+  #gameWorld { cursor: grab; touch-action: none; }
+  #gameWorld:active { cursor: grabbing; }
+
+  /* the bar under the world: the dial, the key, the run buttons */
+  .clockwrap { display: flex; align-items: center; gap: 8px; }
+  /* the dial's size before its first paint, so the layout is right from the start */
+  #clock canvas { width: 64px; height: 64px; }
+  .clockwrap .cap { font-size: 11px; line-height: 1.35; color: var(--cb-muted); }
+  /* two rows at any width: the dial and the run buttons, then the key */
+  .cb-sim-bar .btns { display: flex; gap: 8px; margin-left: auto; order: 1; }
+  .cb-sim-bar #legend { order: 2; flex-basis: 100%; }
+
+  /* the control strips: physics, then engine */
+  .ctlgroup { display: flex; flex-direction: column; gap: 6px; }
+  .ctlgroup > .cb-label { margin: 0; justify-content: flex-start; gap: 6px; }
+  .engine-note { font-size: 12px; color: var(--cb-muted); }
+
+  /* the right column: the story card, then the charts */
+  .side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .story { display: flex; flex-direction: column; gap: 10px; }
+  .story .cb-label { margin: 0; }
+  .story select { width: 100%; font-size: 14px; }
+  .story p { margin: 0; line-height: 1.5; }
+  .story .explainer { color: var(--cb-text-2); }
+  .check { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: var(--cb-radius-card);
+           background: var(--cb-sunken); border-left: 3px solid var(--cb-border-2); }
+  .check.pass { border-left-color: var(--cb-ok); }
+  .check.fail { border-left-color: var(--cb-bad); }
+  .check .head { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  .check dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font-size: 13px; line-height: 1.45; }
+  .check dt { color: var(--cb-muted); }
+  .check dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .check .cb-progress[hidden] { display: none; }   /* the kit sets display: flex, which beats [hidden] */
+  .hint { font-size: 12px; color: var(--cb-muted); }
+  .status { font-size: 12px; color: var(--cb-muted); }
+  /* one column (the kit's 1100 px breakpoint): the scenario card goes above the world, so a
+     first-time viewer reads what it is before scrolling; the charts go last */
+  @media (max-width: 1100px) {
+    .side { display: contents; }
+    .story { order: -1; }
+    .side > .cb-sim-charts { order: 1; }
+  }
+</style>
 </head>
 <body>
-  <div id="controlPanel">
-    <h3>Disk Accretion</h3>
-    <div class="sub">A disk of bodies around a star: 1/r² gravity (Barnes-Hut), leapfrog,
-      perfect merging on contact. Scroll to zoom, drag to pan, double-click to re-centre, space to pause.</div>
-    <select id="presetSel" title="One-click setups, each with a known answer"></select>
-    <div id="presetInfo"></div>
-    <div id="presetResult" title=""></div>
-    <div class="btns">
-      <button onclick="reset()">Reset</button>
-      <button id="pauseBtn" class="alt" onclick="togglePause()">Pause</button>
-      <button class="alt" onclick="resetView()">Fit view</button>
-      <button class="alt" onclick="toggleAbout(true)">About</button>
+<header class="top">
+  <h1 class="cb-title">Disk Accretion<span class="cb-dot">.</span></h1>
+  <span class="note">A young solar system seen from above: a star and a disk of rocky bodies under gravity.
+    Bodies that touch stick together, so dust grows into planets.</span>
+  <span class="spacer"></span>
+  <button class="cb-btn ghost sm" type="button" onclick="toggleAbout(true)">What this model simplifies</button>
+  <span id="themePicker"></span>
+</header>
+
+<div class="cb-sim">
+  <div class="cb-sim-stage">
+    <div class="cb-sim-world"><canvas id="gameWorld" width="800" height="600"></canvas></div>
+    <div class="cb-sim-bar">
+      <span class="clockwrap" data-tip="Time. One turn of the dial is one orbit at 1 AU: a year. The number is the year.">
+        <cb-sim-clock id="clock" period="12" count size="64" cycle-label="year" unit-label="month"></cb-sim-clock>
+        <span class="cap">years<br>(orbits at 1 AU)</span>
+      </span>
+      <cb-sim-legend id="legend"></cb-sim-legend>
+      <span class="btns">
+        <button id="pauseBtn" class="cb-btn" type="button" onclick="togglePause()">Pause</button>
+        <button class="cb-btn" type="button" onclick="resetView()" data-tip="Zoom back out to the whole disk (or double-click the sky)">Fit view</button>
+        <button class="cb-btn primary" type="button" onclick="reset()" data-tip="Start this scenario again from the same seed">Restart</button>
+      </span>
     </div>
-    <div id="readouts"></div>
-    <div id="status"></div>
-    <div id="controls"></div>
-  </div>
-  <canvas id="gameWorld" width="800" height="600"></canvas>
-  <div id="about" onclick="if (event.target === this) toggleAbout(false)">
-    <div class="card">
-      <h4>What this model simplifies</h4>
-      <ul>
-        <li><b>2D.</b> Bodies move in a plane, but gravity falls off as 1/r² (a thin 3D disk, not "flatland" gravity). With no
-          vertical dimension, close encounters end in contact more often than in 3D.</li>
-        <li><b>Pinned star by default.</b> The star is a fixed point that pulls but is never pulled back. That drops the
-          "indirect term" (the star's reflex motion toward its planets). It hardly matters for close encounters, but it removes
-          the Lagrange points L4/L5 entirely: Trojans exist only with the <i>Live star</i> option, which the Trojan, Routh,
-          chaotic-zone and resonance presets use.</li>
-        <li><b>No gas.</b> Real disks are mostly gas at first. Without it there are no gas giants, no gas drag damping orbits and
-          no planet migration, and the asteroid belt is not stirred by a forming Jupiter.</li>
-        <li><b>Perfect merging.</b> Bodies that touch always stick and conserve mass and momentum; nothing shatters or bounces.</li>
-        <li><b>Radius inflation.</b> In the disk presets bodies collide as if ~30× larger than their density implies, so growth
-          takes minutes instead of millions of years. That changes how often close passes merge rather than scatter
-          (FINDINGS §3 and §6).</li>
-        <li><b>Two integrators.</b> Leapfrog (default, fast) and a hybrid symplectic one (exact Kepler orbits plus resolved close
-          encounters, for science runs).</li>
-      </ul>
-      <p>Each preset checks the simulation against a known answer. The full list, with tolerances and measured values, is in
-        <a href="https://github.com/algorithm0r/Disk-Accretion/blob/main/VALIDATION.md" target="_blank" rel="noopener">VALIDATION.md</a>;
-        the science results are in
-        <a href="https://github.com/algorithm0r/Disk-Accretion/blob/main/analysis/FINDINGS.md" target="_blank" rel="noopener">FINDINGS.md</a>.</p>
-      <button onclick="toggleAbout(false)">Close</button>
+    <div class="ctlgroup">
+      <div class="cb-label">Physics <small>what is simulated</small></div>
+      <div id="controlsPhysics"></div>
+    </div>
+    <div class="ctlgroup">
+      <div class="cb-label">Engine <small>speed and accuracy</small></div>
+      <div id="controlsEngine"></div>
+      <div class="engine-note" id="engineNote"></div>
     </div>
   </div>
 
-  <!-- socket.io client (for the standard DB client in socket mode) -->
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <!-- sim core, in dependency order; main.js last -->
-  <script src="src/util.js"></script>
-  <script src="src/params.js"></script>
-  <script src="src/db.js"></script>
-  <script src="src/engine.js"></script>
-  <script src="src/gravity.js"></script>
-  <script src="src/collide.js"></script>
-  <script src="src/hybrid.js"></script>
-  <script src="src/world.js"></script>
-  <script src="src/presets.js"></script>
-  <script src="src/pool.js"></script>
-  <script src="src/observer.js"></script>
-  <script src="src/charts.js"></script>
-  <script src="src/datamanager.js"></script>
-  <script src="src/ui.js"></script>
-  <script src="src/main.js"></script>
+  <div class="side">
+    <section class="cb-card story">
+      <div class="cb-label">Scenario</div>
+      <select id="presetSel" class="cb-select" aria-label="Scenario"></select>
+      <p class="explainer" id="presetInfo"></p>
+      <div class="check" id="check">
+        <div class="head"><span class="cb-label">Measured against theory</span><span id="verdict" class="cb-badge"></span></div>
+        <dl>
+          <dt>Expected</dt><dd id="expected"></dd>
+          <dt id="measuredLabel">Measured</dt><dd id="measured"></dd>
+        </dl>
+        <div class="cb-progress" id="progress" style="--v: 0; --c: var(--cb-info)"></div>
+      </div>
+      <p class="hint">Scroll to zoom · drag to pan · double-click to fit · <span class="cb-kbd">Space</span> to pause.
+        Hover any control for what it does.</p>
+      <p class="status" id="status"></p>
+    </section>
+
+    <div class="cb-sim-charts">
+      <cb-sim-series id="chN" label="Bodies left" x-label="years"></cb-sim-series>
+      <cb-sim-series id="chMax" label="Largest body (Earth masses)" x-label="years"></cb-sim-series>
+      <cb-sim-series id="chCost" label="Compute per step (ms)" x-label="years"></cb-sim-series>
+      <cb-sim-series id="chFps" label="Frames per second" x-label="years"></cb-sim-series>
+      <cb-sim-series id="chLz" label="Angular momentum conserved to (digits)" x-label="years" class="wide"
+        data-tip="−log₁₀ |ΔL/L| of the total: orbits, the spin merged bodies carry, and what the star swallowed or the disk ejected. 13 means the error is 1 part in 10¹³; machine precision is ~15."></cb-sim-series>
+    </div>
+  </div>
+</div>
+
+<dialog class="cb-modal" id="about">
+  <header><h3>What this model simplifies</h3><button class="cb-btn ghost sm" type="button" onclick="toggleAbout(false)">Close</button></header>
+  <div class="body cb-prose">
+    <ul>
+      <li><b>2D.</b> Bodies move in a plane, but gravity falls off as 1/r² (a thin 3D disk, not "flatland" gravity). With no
+        vertical dimension, close encounters end in contact more often than in 3D.</li>
+      <li><b>Pinned star by default.</b> The star is a fixed point that pulls but is never pulled back. That drops the
+        "indirect term" (the star's reflex motion toward its planets). It hardly matters for close encounters, but it removes
+        the Lagrange points L4/L5 entirely: Trojans exist only with the <i>Live star</i> option, which the Trojan, Routh,
+        chaotic-zone and resonance scenarios use.</li>
+      <li><b>No gas.</b> Real disks are mostly gas at first. Without it there are no gas giants, no gas drag damping orbits and
+        no planet migration, and the asteroid belt is not stirred by a forming Jupiter.</li>
+      <li><b>Perfect merging.</b> Bodies that touch always stick and conserve mass and momentum; nothing shatters or bounces.</li>
+      <li><b>Radius inflation.</b> In the disk scenarios bodies collide as if ~30× larger than their density implies, so growth
+        takes minutes instead of millions of years. That changes how often close passes merge rather than scatter
+        (FINDINGS §3 and §6).</li>
+      <li><b>Two integrators.</b> Leapfrog (default, fast) and a hybrid symplectic one (exact Kepler orbits plus resolved close
+        encounters, for science runs).</li>
+    </ul>
+    <p>Each scenario checks the simulation against a known answer. The full list, with tolerances and measured values, is in
+      <a href="https://github.com/algorithm0r/Disk-Accretion/blob/main/VALIDATION.md" target="_blank" rel="noopener">VALIDATION.md</a>;
+      the science results are in
+      <a href="https://github.com/algorithm0r/Disk-Accretion/blob/main/analysis/FINDINGS.md" target="_blank" rel="noopener">FINDINGS.md</a>.</p>
+  </div>
+</dialog>
+
+<!-- socket.io client (for the standard DB client in socket mode) -->
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<!-- sim core, in dependency order; main.js last -->
+<script src="src/util.js"></script>
+<script src="src/params.js"></script>
+<script src="src/db.js"></script>
+<script src="src/engine.js"></script>
+<script src="src/gravity.js"></script>
+<script src="src/collide.js"></script>
+<script src="src/hybrid.js"></script>
+<script src="src/world.js"></script>
+<script src="src/presets.js"></script>
+<script src="src/pool.js"></script>
+<script src="src/observer.js"></script>
+<script src="src/datamanager.js"></script>
+<script src="src/ui.js"></script>
+<script src="src/main.js"></script>
 </body>
 </html>

@@ -9,17 +9,19 @@ steps per frame, or ~40k at 1 step per frame; the WebGPU backend (RTX 3070 Ti) ~
 (see DEVLOG for the benchmarks). Two integrators: fixed-step leapfrog (the default, fast), and a
 hybrid symplectic integrator (exact Kepler orbits + resolved close encounters, MERCURIUS-style)
 for science runs. The science results (Stage 3), their dt-convergence checks (Stages 5–6) and the
-integrator comparison are in `analysis/FINDINGS.md`. For teaching, the panel has one-click presets
+integrator comparison are in `analysis/FINDINGS.md`. For teaching, the page has one-click scenarios
 with known answers: Kepler orbits, Trojans at L4/L5, the Routh criterion, a planet's chaotic zone,
 resonance gaps, Hill stability and Toomre instability. Each shows a live measured-vs-expected readout,
-and `VALIDATION.md` records every benchmark with its tolerance and measured value.
+and `VALIDATION.md` records every benchmark with its tolerance and measured value. The page is built
+on the shared Claude Basic UI kit (0.6.0, vendored in `vendor/`): four themes, live charts, a time dial.
 
 **Live:** https://algorithm0r.github.io/Disk-Accretion/ · **Repo:** https://github.com/algorithm0r/Disk-Accretion
 
 ## Run
 - **Browser:** open `index.html` (file:// works), or
   http://localhost:8000/research/Disk%20Accretion/sim/ via the always-on Static Server. Scroll to
-  zoom, drag to pan, space to pause.
+  zoom, drag to pan, space to pause. A link can open on a scenario: `index.html#trojans` (the ids
+  are the keys of `PRESETS` in `src/presets.js`).
 - **Headless runs:** `npm install` once, then `node runner.mjs --name X --collection batch_NNN
   --orbits 1000 --set N=5000,diskMass=0.001` — runs the same sim core in the main V8 realm
   (indirect `eval`, not `vm`; see `~/.claude/conventions.md` §4) and writes self-describing
@@ -35,8 +37,10 @@ and `VALIDATION.md` records every benchmark with its tolerance and measured valu
 
 ## Layout
 - `src/` — sim core (`engine`, `params`, `world`, `gravity`, `collide`, `observer`,
-  `datamanager`, `charts`, `util`, `hybrid`, `presets`) + `db.js` (vendored standard DB client) + `pool.js` (browser-only
+  `datamanager`, `util`, `hybrid`, `presets`) + `db.js` (vendored standard DB client) + `pool.js` (browser-only
   worker pool / WebGPU force providers) + `ui.js`/`main.js` (browser-only, all DOM).
+- `vendor/` — Claude Basic 0.6.0 (`claude-basic.css`/`.js`), a pinned copy of the kit's `dist/`.
+  Never edit it: fix the kit upstream and re-vendor.
 - `runner.mjs` / `sweep.mjs` / `smoketest.mjs` / `validate.mjs` / `bench.mjs` / `bench-pool.mjs` — headless entry points.
 - `analysis/` — `stage3.py`, `figures/`, `tables.md`, `FINDINGS.md` (run packets in `analysis/runs/`
   are git-ignored; the canonical copies are in MongoDB `diskAccretionDB`, batch_001–014).

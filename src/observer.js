@@ -7,7 +7,10 @@
 // circles on top, coloured by mass, and the heaviest few get a faint Hill-radius ring so
 // their feeding zones show. Pan/zoom state lives in `view` (ui.js wires the mouse to it).
 var Observer = class Observer {
-  constructor(world) {
+  // `colors` comes from ui.js, resolved from the Claude Basic theme tokens (a canvas can't read
+  // var()); see worldColors() there. Every colour is an [r, g, b] triple:
+  //   { bg, ramp: [[index, rgb], …], star, glow, test, hill }
+  constructor(world, colors) {
     this.world = world;
     this.view = { zoom: 1, cx: 0, cy: 0 };   // world point at the canvas centre
     this.showHill = true;
@@ -15,26 +18,37 @@ var Observer = class Observer {
     this.img = null; this.buf = null;
     this.big = new Int32Array(1024);
     this.drawMs = 0;
-    this.palette = Observer.buildPalette();
+    this.setColors(colors);
   }
 
   update() {}
 
+  // a theme change hands in new colours; everything derived from them is rebuilt here
+  setColors(c) {
+    const abgr = (v) => ((255 << 24) | (v[2] << 16) | (v[1] << 8) | v[0]) >>> 0;
+    const css = (v, a) => (a == null ? 'rgb(' : 'rgba(') + v[0] + ',' + v[1] + ',' + v[2] + (a == null ? ')' : ',' + a + ')');
+    this.colors = c;
+    this.palette = Observer.buildPalette(c.ramp, abgr, css);
+    this.bg32 = abgr(c.bg);
+    this.test32 = abgr(c.test);
+    this.css = {
+      star: css(c.star), glowIn: css(c.glow, 0.9), glowOut: css(c.glow, 0),
+      hill: css(c.hill, 0.2),
+    };
+  }
+
   // 40 colours from cold dust (1 initial mass) to hot protoplanet (2^20 initial masses),
-  // indexed by 2·log2(m / m0). Stored both as packed ABGR (pixels) and CSS (circles).
-  static buildPalette() {
-    const stops = [
-      [0, [110, 150, 220]], [4, [150, 205, 255]], [8, [235, 240, 255]],
-      [14, [255, 225, 120]], [22, [255, 150, 60]], [30, [255, 80, 50]], [39, [255, 40, 120]],
-    ];
+  // indexed by 2·log2(m / m0), interpolated between the ramp's stops. Stored both as packed
+  // ABGR (pixels) and CSS (circles).
+  static buildPalette(stops, abgr, cssOf) {
     const u32 = new Uint32Array(40), css = [];
     for (let i = 0; i < 40; i++) {
       let a = stops[0], b = stops[stops.length - 1];
       for (let s = 0; s < stops.length - 1; s++) if (i >= stops[s][0] && i <= stops[s + 1][0]) { a = stops[s]; b = stops[s + 1]; break; }
       const f = b[0] === a[0] ? 0 : (i - a[0]) / (b[0] - a[0]);
       const c = [0, 1, 2].map((k) => Math.round(a[1][k] + f * (b[1][k] - a[1][k])));
-      u32[i] = (255 << 24) | (c[2] << 16) | (c[1] << 8) | c[0];
-      css.push('rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')');
+      u32[i] = abgr(c);
+      css.push(cssOf(c));
     }
     return { u32: u32, css: css };
   }
@@ -53,7 +67,7 @@ var Observer = class Observer {
       this.buf = new Uint32Array(this.img.data.buffer);
     }
     const buf = this.buf, pal = this.palette.u32;
-    buf.fill(0xff130e0b);   // background #0b0e13 (ABGR)
+    buf.fill(this.bg32);
 
     const sc = this.scale(W, H);
     const ox = W * 0.5 - this.view.cx * sc, oy = H * 0.5 + this.view.cy * sc;   // y up
@@ -71,7 +85,7 @@ var Observer = class Observer {
         const px = (ox + x[i] * sc) | 0, py = (oy - y[i] * sc) | 0;
         if (px < 0 || py < 0 || px >= W - 1 || py >= H - 1) continue;
         const o = py * W + px;
-        buf[o] = buf[o + 1] = buf[o + W] = buf[o + W + 1] = 0xffffd89f;   // #9fd8ff (ABGR)
+        buf[o] = buf[o + 1] = buf[o + W] = buf[o + W + 1] = this.test32;
         continue;
       }
       if (k >= 4 || r[i] * sc >= 1) { big[nBig++] = i; continue; }
@@ -85,10 +99,10 @@ var Observer = class Observer {
     const sx = si >= 0 ? ox + x[si] * sc : ox, sy = si >= 0 ? oy - y[si] * sc : oy;
     const rs = Math.max(4, P.rStar * sc * 0.6);
     const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, rs * 3);
-    glow.addColorStop(0, 'rgba(255,240,190,0.9)'); glow.addColorStop(1, 'rgba(255,200,80,0)');
+    glow.addColorStop(0, this.css.glowIn); glow.addColorStop(1, this.css.glowOut);
     ctx.fillStyle = glow;
     ctx.beginPath(); ctx.arc(sx, sy, rs * 3, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#fff6d8';
+    ctx.fillStyle = this.css.star;
     ctx.beginPath(); ctx.arc(sx, sy, rs, 0, TAU); ctx.fill();
 
     // big bodies, lightest first so the heaviest end up on top
@@ -106,7 +120,7 @@ var Observer = class Observer {
     }
     // Hill radius r_H = a (m / 3 M_star)^(1/3): the zone a protoplanet clears
     if (this.showHill) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.strokeStyle = this.css.hill;
       ctx.lineWidth = 1;
       for (let q = list.length - 1; q >= Math.max(0, list.length - this.hillCount); q--) {
         const i = list[q];

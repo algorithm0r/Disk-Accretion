@@ -1,5 +1,6 @@
 'use strict';
-// Samples world.stats() every reportingPeriod steps, feeds the live graphs, and (when
+// Samples world.stats() every reportingPeriod steps (optionally into a `graphs` sink; the browser's live
+// charts are fed by UiPump in ui.js instead), and (when
 // PARAMETERS.autoSave is on) ships a self-describing packet — full PARAMETERS + samples —
 // to the DB at epoch. The packet() helper (db.js) embeds PARAMETERS verbatim so every run
 // reconstructs from its own record.

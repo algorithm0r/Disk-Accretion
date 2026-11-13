@@ -46,7 +46,11 @@
   VALIDATION.md's results table is never edited in place; append dated amendments.
 - **Model/view split:** the world holds state and never draws; the `Observer` renders it.
 - **Config:** one `PARAMETERS` global (`params.js`), serialized verbatim into every saved
-  packet. `PARAM_SCHEMA` drives the control panel.
+  packet. `PARAM_SCHEMA` drives the control strips under the world (`group`, `tip`, `presets`).
+- **UI kit:** Claude Basic, a pinned copy in `vendor/` (0.6.0). `cb-` classes and `--cb-*` tokens
+  only, no raw hex; the world's canvas colours are resolved from tokens (`worldColors()` in
+  `ui.js`) and the legend uses the same expressions. Never edit `vendor/`: kit bugs go upstream
+  (`ui.js` builds its own control strip until `CB.sim.controls` has log sliders and sync).
 - **DB:** the vendored standard client `src/db.js` (see `~/.claude/conventions.md` §4).
   Use `db.packet()`, `db.nextBatch()`, and `db.scratch()` for throwaway work.
 

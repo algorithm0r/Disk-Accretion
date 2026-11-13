@@ -1,62 +1,57 @@
 # Disk Accretion — STATUS
 *One screen. The current pulse. Overwritten, never appended — for history read DEVLOG.*
 
-**Updated:** 2026-10-16 (Stage 8 close) — refreshed every session close; may carry unverified claims
+**Updated:** 2026-11-13 (Stage 9 close) — refreshed every session close; may carry unverified claims
 **Verified:** 2026-10-15 (scaffold) — last cold audit (`/audit`); the State section is trusted only as of this date
 
 ## Stage
-Stages 1, 2 (target half met), 3, 5, 6 and 8 `[ DONE ]` (8 closed 2026-10-16). No stage active.
+Stages 1, 2 (target half met), 3, 5, 6, 8 and 9 `[ DONE ]` (9 closed 2026-11-13). No stage active.
 `[ PLANNED ]`: Stage 4 (past 5× scale) and Stage 7 (parked: the disk-mass sweep and light disks
-under the hybrid; a faster hybrid; the demo-default call).
+under the hybrid; a faster hybrid; the demo-default call). DEVPLAN now has a Backlog.
 
 ## State
 - Public repo https://github.com/algorithm0r/Disk-Accretion; Pages serves `main` at
   https://algorithm0r.github.io/Disk-Accretion/. Pushes to `main` go live.
-- Two integrators: leapfrog (browser default) and hybrid (`src/hybrid.js`: Kepler drift +
-  MERCURIUS-style encounters, swept contacts; the one for science runs). Both run from the panel;
-  the hybrid with the cpu and gpu backends was stepped in the browser pane @ d76667d, no console
-  errors.
-- smoke PASS 29/29 @ b81555e (2026-10-16), including hybrid checks 7a–d and 6 analytic benchmarks.
+- **The page is on Claude Basic 0.6.0** (`vendor/`, pinned). The world is on the left, the scenario
+  card (picker, explainer, "Measured against theory") and line charts on the right; the dial, key
+  and Physics/Engine control strips sit under the world. World colours come from theme tokens.
+  `index.html#<preset>` opens a scenario. All 8 scenarios ran with no console errors, checked in
+  the browser pane @ 1abeac9-dirty. The live page is unverified until the post-push check.
+- Two integrators: leapfrog (browser default) and hybrid (`src/hybrid.js`; the one for science runs).
+- smoke PASS (28 checks) and validate PASS (7.9 min, table unchanged but for its date) @
+  1abeac9-dirty, 2026-11-13.
 - Teaching presets (`src/presets.js`): Kepler, Trojans, Routh, chaotic zone, resonance gaps, Hill
-  stability, Toomre, default disk, each with a live measured-vs-expected readout. `validate.mjs`
-  PASS (7.9 min) → `VALIDATION.md`. Live Pages @ a121efb verified in the browser pane.
-- Results in `analysis/FINDINGS.md` (§6 = converged hybrid numbers and which earlier headlines
-  they change): 312 runs, MongoDB `diskAccretionDB` batch_001–017 plus local `analysis/runs/`
-  (git-ignored). `python analysis/stage3.py` regenerates fig1–11 and `tables.md` (ran clean).
+  stability, Toomre and the default disk, each with a live measured-vs-expected check.
+- Results in `analysis/FINDINGS.md` (§6 = converged hybrid numbers): 312 runs, MongoDB
+  `diskAccretionDB` batch_001–017 plus local `analysis/runs/` (git-ignored).
 
 ## Metrics
-- Cost at 30 fps (i7-12700K, Node, matched in-page): leapfrog 6.6 ms/step at 10k, max N ~12.0k at
-  4 steps/frame, ~41.6k at 1. Hybrid 15.7 ms/step, max N ~5.7k / ~17.6k (2.4×). GPU backend
-  (leapfrog) ~27k / ~88k.
-- Converged under the hybrid (8 seeds, dt 0.01 / 0.005 / 0.0025): ejections per run f = 1: 70 ± 3
-  (from dt/2), f = 3: 53 ± 3, f = 10: 15 ± 1, fading-30: 23 ± 1, fading-100: 13 ± 1. First ejection
-  in the hot disks ~220–280 orbits.
-- Default disk (8 seeds, 3000 orbits): final e 0.14 ± 0.02 (resolved), spacing 7.0 ± 0.4 mutual
-  Hill radii per run (pooled median 6.5), ejections 4–6 per run, t½ 2.6 orbits.
-- Unchanged: runaway peak M₁/⟨m⟩ ~47 at ~18 orbits; mass-function index q = 2.37 at 10 orbits.
-- Validation (VALIDATION.md):
-  - Trojan centres 60.05° / −60.05°.
-  - Routh edge between μ = 0.03846 and 0.03865 (μ_c 0.03852).
-  - Chaotic zone ∝ μ^0.269 (Wisdom 2/7), within 3–10% of 1.3 μ^{2/7}.
-  - Hill edge 3.3–3.4 (2√3 = 3.46).
-  - Kepler exact (hybrid).
-  - Resonance gaps located at 3:1 / 2:1 (μ = 3e-3; 3:1 marginal).
+- Cost at 30 fps (i7-12700K, Node; core unchanged since 2026-10-16): leapfrog 6.6 ms/step at 10k,
+  max N ~12.0k at 4 steps/frame, ~41.6k at 1. Hybrid 15.7 ms/step, ~5.7k / ~17.6k. GPU backend
+  (leapfrog) ~27k / ~88k. The new page's in-browser fps has not been timed (the pane was hidden).
+- Converged under the hybrid (8 seeds): ejections per run f = 1: 70 ± 3, f = 3: 53 ± 3, f = 10:
+  15 ± 1, fading-30: 23 ± 1, fading-100: 13 ± 1. First ejection in the hot disks ~220–280 orbits.
+- Default disk (8 seeds, 3000 orbits): final e 0.14 ± 0.02, spacing 7.0 ± 0.4 mutual Hill radii,
+  ejections 4–6 per run, t½ 2.6 orbits. Runaway peak M₁/⟨m⟩ ~47 at ~18 orbits (the page showed
+  40× at year 19 on 2026-11-13).
+- Validation: Trojans ±60.05°; Routh edge 0.03846–0.03865 (μ_c 0.03852); chaotic zone ∝ μ^0.269;
+  Hill edge 3.3–3.4 (2√3 = 3.46); Kepler exact (hybrid); gaps at 3:1 / 2:1.
 
 ## Branches
 - `main`, tracking `origin` = https://github.com/algorithm0r/Disk-Accretion (public; GitHub Pages serves `main`)
 
 ## Open
-- The disk-mass sweep (batch_006) and the Toomre runs are still leapfrog at dt = 0.01; the heavy
-  (hot) disks likely over-eject there (Stage 7).
-- Residual flags with no trend: f = 10 final e (0.21 / 0.26 / 0.15), f = 3 t½ ±2%.
-- The pinned star (all disk runs) has no L4/L5: no co-orbital configurations among oligarchs.
-  The live star fixes it, but only with leapfrog.
-- Chris's call: make fading inflation (f₀ = 30, q = 1) the demo default? Converged, it ejects 23
-  per run (not 36–42).
+- Demo default (Stage 7, Chris's call). Stage 9 recommends opening on the default disk with
+  constant inflation, and switching to Trojans for "matches theory". Fading inflation's extra
+  ejections start at ~220 orbits, past a demo's first minutes; the q slider shows it on demand.
+- `src/db.js:69` browser socket save is broken (`root.io`); `autoSave` is off (Backlog).
+- Kit gaps (`CB.sim.controls`, `.cb-progress[hidden]`) are worked around in `ui.js` / `index.html`
+  until the kit fixes them.
+- Accepted gaps: the disk-mass sweep and the Toomre runs are still leapfrog at dt = 0.01 (Stage 7);
+  the pinned star has no L4/L5 (the live star fixes it, leapfrog only).
 
 ## Next action
-Chris's call: resume Stage 7 (the disk-mass sweep under the hybrid) or tune the teaching presets
-after classroom use.
+Chris shows the page to the grad students; watch real fps there. Then Stage 7 or the Backlog.
 
 ## Blockers
 - none

@@ -24,6 +24,8 @@
 - **Stage 8 (2026-10-16):** `src/presets.js` (8 presets with trackers), massless test particles,
   live-star option, exact massive-only gravity/collisions, preset picker + explainers +
   measured-vs-expected readout + About panel, `validate.mjs`, VALIDATION.md.
+- **Stage 9 (2026-11-13):** the page on Claude Basic 0.6.0 (`vendor/`): world left, scenario card
+  and live charts right, dial + key + control strips under the world; theme-resolved world colours.
 
 ## Not yet built
 - 5× scale-up: GPU collisions, multi-step GPU integration, SharedArrayBuffer (Stage 4).
@@ -294,7 +296,9 @@ resolved at 0.14 ± 0.02. Two residual flags (f = 10 final e, f = 3 t½ ±2%) ha
       item 1)
 - [ ] A larger N for the light disks (M ≤ 3e-4), the closest thing here to a quiet oligarchy
 - [ ] Decide the demo default: fading inflation (f₀ = 30, q = 1) keeps the fast early growth and
-      restores scattering, at 23 ejections per run converged (Chris's call)
+      restores scattering, at 23 ejections per run converged (Chris's call). Stage 9 recommends
+      no: its gain starts at ~220 orbits, past a demo's first minutes, and the disk check's
+      evidence is constant-inflation. The q slider is now in the panel (DEVLOG 2026-11-13).
 - [ ] Hybrid speed: the changeover set holds ~half the bodies of the dense early disk; a cheaper
       encounter integrator or a mass-dependent r_c for small bodies could make it a browser default
 **Done when:** every headline in FINDINGS rests on hybrid runs that converge across dt.
@@ -322,3 +326,41 @@ VALIDATION.md, the fast ones run in the smoketest, and the presets load and run 
 page @ a121efb runs the presets (Trojans 60.05°/−60.05°, Kepler exact) with no console errors.
 Resonance gaps are a location test with a heavier planet (μ = 3e-3), not the 10⁵-orbit chaotic
 clearing of the real belt; said plainly in VALIDATION.md §5.
+
+### Stage 9 — Presentation: Claude Basic and the first 30 seconds  [ DONE ] (closed 2026-11-13)
+(Added 2026-11-13 from the hub's brief: Chris is showing the sim to two incoming grad students as a
+possible TCSS 600 project, a "build a solar system" simulation game with N-body research objectives.
+No model behaviour changes; Stage 7 stays parked.)
+- [x] Vendor Claude Basic 0.6.0 (`vendor/claude-basic.{css,js}`, byte-identical to Flea Jumping's
+      pinned copy); `cb-` classes and `--cb-*` tokens only, no raw hex in the UI
+- [x] Layout by the kit's sim rules: the world and the charts get the screen, controls sit under the
+      world (Physics, then Engine), time is a dial (one turn = one orbit at 1 AU = a year), the key
+      is marks with names, reports are lines (bodies left, largest body, compute per step, fps,
+      angular momentum conserved to N digits) instead of a table of changing numbers
+- [x] The scenario card: grouped picker ("Build a solar system" / "Check the physics against a known
+      answer"), the explainer, and "Measured against theory" (expected, measured, a badge: measuring
+      with progress / matches theory / does not match / compare by eye)
+- [x] Hover tips on every control (`PARAM_SCHEMA.tip`); the fading-inflation exponent q exposed as a
+      disk control (default 0, unchanged); `#preset` links open a scenario (`index.html#trojans`)
+- [x] World colours resolved from theme tokens (`worldColors()`), so all four themes draw it; the
+      legend uses the same expressions
+- [x] Kit gaps written up for the kit's repo, not patched here: `CB.sim.controls` lacks log sliders,
+      formatting, tips and sync (so `ui.js` builds the same markup itself); `.cb-progress` ignores
+      `hidden`
+**Done when:** the page runs on the vendored kit with no console errors in every scenario, a viewer
+at ≥ 1280 px sees the world, the scenario card and its check without scrolling, and smoke and
+validation still pass. Publishing approved mid-session ("all can go public", relayed by the hub).
+✓ Met: 8 scenarios cycled with no console errors; at 1280×800 everything to the key sits above
+782 px; smoke 28 PASS, validate PASS (7.9 min).
+
+## Backlog
+- [ ] fix: `src/db.js:69` `io = root.io`: `root` is out of scope in the factory, so a browser socket
+      save throws "root is not defined". The canonical `~/.claude/scaffold/db.js` has the fix:
+      re-vendor it. `autoSave` is off, so the demo never hits it.
+- [ ] feat: replace `ui.js`'s own control strip with `CB.sim.controls` once the kit has log sliders,
+      value formatting, tips and a sync handle (written up for the kit 2026-11-13); drop the
+      `.cb-progress[hidden]` rule when the kit fixes it
+- [ ] idea: a "planet formation, fading inflation" scenario with its own expected numbers
+      (FINDINGS §6), so fading can be shown without becoming the default
+- [ ] idea: time the page's real fps in a visible browser at 10k (this session's pane was hidden;
+      Node numbers are unchanged because the core is unchanged)

@@ -66,27 +66,47 @@ var PARAMETERS = {
   },
 };
 
-// Schema drives the auto-generated control panel (ui.js). One entry per live-tunable.
+// Schema drives the auto-generated control strip (ui.js). One entry per live-tunable.
 //   log: slider moves in log10 space    resets: changing it rebuilds the disk
-//   options: renders a <select>         type 'bool': renders a checkbox
+//   options: renders a <select> ([value] or [{value, label}])    type 'bool': renders a switch
 //   presets: shown only for those presets (presets.js)
+//   group: 'physics' (what is simulated) | 'engine' (how: speed and accuracy)
+//   tip: the hover explanation, for a first-time viewer
 var PARAM_SCHEMA = [
-  { key: 'planetMass', label: 'Planet mass μ (star = 1)', min: 1e-5, max: 0.06, log: true, resets: true, presets: ['trojans', 'routh', 'gap', 'kirkwood'] },
-  { key: 'planetEcc', label: 'Planet eccentricity', min: 0, max: 0.3, step: 0.01, resets: true, presets: ['kirkwood'] },
-  { key: 'hillDelta', label: 'Separation Δ (mutual Hill radii)', min: 1.5, max: 6, step: 0.05, resets: true, presets: ['hill'] },
-  { key: 'liveStar', label: 'Live star (moves; barycentric)', type: 'bool', resets: true, presets: ['trojans', 'routh', 'gap', 'kirkwood'] },
-  { key: 'N', label: 'Bodies N', min: 100, max: 200000, log: true, round: true, resets: true, presets: ['disk', 'toomre'] },
-  { key: 'diskMass', label: 'Disk mass', min: 1e-4, max: 0.1, log: true, resets: true, presets: ['disk', 'toomre'] },
-  { key: 'dispersion', label: 'Velocity dispersion', min: 0, max: 0.1, step: 0.001, resets: true, presets: ['disk', 'toomre'] },
-  { key: 'radiusInflation', label: 'Radius inflation', min: 1, max: 300, log: true, live: 'radii', presets: ['disk', 'toomre'] },
-  { key: 'stepsPerFrame', label: 'Steps / frame', min: 1, max: 400, log: true, round: true },
-  { key: 'theta', label: 'θ (Barnes-Hut)', min: 0, max: 1.5, step: 0.05 },
-  { key: 'dt', label: 'dt', min: 0.001, max: 0.03, step: 0.001 },
-  { key: 'integrator', label: 'Integrator', options: ['leapfrog', 'hybrid'] },
-  { key: 'gravity', label: 'Gravity (cpu)', options: ['bh', 'brute'] },
-  { key: 'backend', label: 'Force backend', options: ['cpu', 'workers', 'gpu'], live: 'backend' },
-  { key: 'selfGravity', label: 'Self-gravity', type: 'bool' },
-  { key: 'collisions', label: 'Collisions', type: 'bool' },
+  { key: 'planetMass', group: 'physics', label: 'Planet mass μ (star = 1)', min: 1e-5, max: 0.06, log: true, resets: true, presets: ['trojans', 'routh', 'gap', 'kirkwood'],
+    tip: 'The planet’s share of the star’s mass. Jupiter is 0.001.' },
+  { key: 'planetEcc', group: 'physics', label: 'Planet eccentricity', min: 0, max: 0.3, step: 0.01, resets: true, presets: ['kirkwood'],
+    tip: 'How oval the planet’s orbit is (0 = circle). Eccentricity drives the resonances that open the gaps.' },
+  { key: 'hillDelta', group: 'physics', label: 'Separation Δ (mutual Hill radii)', min: 1.5, max: 6, step: 0.05, resets: true, presets: ['hill'],
+    tip: 'How far apart the two planets start, in units of their shared gravitational reach. Theory: stable above 2√3 ≈ 3.46.' },
+  { key: 'liveStar', group: 'physics', label: 'Live star (it wobbles)', type: 'bool', resets: true, presets: ['trojans', 'routh', 'gap', 'kirkwood'],
+    tip: 'On: the star is pulled by its planets and moves. Off: the star is pinned in place, which removes the Lagrange points.' },
+  { key: 'N', group: 'physics', label: 'Bodies N', min: 100, max: 200000, log: true, round: true, resets: true, presets: ['disk', 'toomre'],
+    tip: 'How many bodies the disk starts with. More is finer-grained and slower.' },
+  { key: 'diskMass', group: 'physics', label: 'Disk mass (star = 1)', min: 1e-4, max: 0.1, log: true, resets: true, presets: ['disk', 'toomre'],
+    tip: 'Total mass of the disk. Above ~0.03 its own gravity takes over (see the Toomre scenario).' },
+  { key: 'dispersion', group: 'physics', label: 'Random velocity', min: 0, max: 0.1, step: 0.001, resets: true, presets: ['disk', 'toomre'],
+    tip: 'Random motion on top of circular orbits, as a fraction of orbital speed. A hotter disk grows more slowly.' },
+  { key: 'radiusInflation', group: 'physics', label: 'Radius inflation', min: 1, max: 300, log: true, live: 'radii', presets: ['disk', 'toomre'],
+    tip: 'Bodies collide as if this many times larger than their true size, so minutes of viewing stand in for millions of years.' },
+  { key: 'inflationRamp', group: 'physics', label: 'Inflation fades with mass (q)', min: 0, max: 2, step: 0.05, live: 'radii', presets: ['disk', 'toomre'],
+    tip: '0 = every body inflated equally. 1 = small bodies stay puffy while big ones shrink toward true size, so they scatter more and merge less (FINDINGS §6).' },
+  { key: 'selfGravity', group: 'physics', label: 'Self-gravity', type: 'bool',
+    tip: 'Off: bodies feel only the star, not each other.' },
+  { key: 'collisions', group: 'physics', label: 'Collisions (merge on touch)', type: 'bool',
+    tip: 'Off: bodies pass through each other.' },
+  { key: 'stepsPerFrame', group: 'engine', label: 'Speed (steps per frame)', min: 1, max: 400, log: true, round: true,
+    tip: 'Simulation steps between screen updates. Higher runs faster until the frame rate drops.' },
+  { key: 'dt', group: 'engine', label: 'Time step dt', min: 0.001, max: 0.03, step: 0.001,
+    tip: 'Smaller is more accurate and slower. One orbit at 1 AU is 2π ≈ 6.28 time units.' },
+  { key: 'integrator', group: 'engine', label: 'Integrator', options: [{ value: 'leapfrog', label: 'leapfrog (fast)' }, { value: 'hybrid', label: 'hybrid (accurate)' }],
+    tip: 'Leapfrog: fixed steps, fast. Hybrid: exact Kepler orbits plus resolved close encounters, ~2.4× the cost.' },
+  { key: 'gravity', group: 'engine', label: 'Gravity sum (cpu)', options: [{ value: 'bh', label: 'Barnes-Hut tree' }, { value: 'brute', label: 'brute force (exact)' }],
+    tip: 'Barnes-Hut groups distant bodies (O(N log N)); brute force adds every pair (O(N²)).' },
+  { key: 'theta', group: 'engine', label: 'Barnes-Hut opening angle θ', min: 0, max: 1.5, step: 0.05,
+    tip: '0 = exact. Larger treats more distant groups as one body: faster and rougher.' },
+  { key: 'backend', group: 'engine', label: 'Force backend', options: [{ value: 'cpu', label: 'cpu (main thread)' }, { value: 'workers', label: 'web workers' }, { value: 'gpu', label: 'GPU (WebGPU)' }], live: 'backend',
+    tip: 'Where body-body gravity is computed. Falls back to cpu where the browser lacks it.' },
 ];
 
 // the untouched defaults: a preset's params are applied over these, never over another preset's
