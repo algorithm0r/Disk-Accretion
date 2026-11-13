@@ -16,7 +16,8 @@ under the hybrid; a faster hybrid; the demo-default call). DEVPLAN now has a Bac
   card (picker, explainer, "Measured against theory") and line charts on the right; the dial, key
   and Physics/Engine control strips sit under the world. World colours come from theme tokens.
   `index.html#<preset>` opens a scenario. All 8 scenarios ran with no console errors, checked in
-  the browser pane @ 1abeac9-dirty. The live page is unverified until the post-push check.
+  the browser pane @ 1abeac9-dirty. Pushed; the live Pages site serves it (kit loaded, grouped
+  picker, 5 charts, no console errors) @ ddb1eae, 2026-11-13.
 - Two integrators: leapfrog (browser default) and hybrid (`src/hybrid.js`; the one for science runs).
 - smoke PASS (28 checks) and validate PASS (7.9 min, table unchanged but for its date) @
   1abeac9-dirty, 2026-11-13.
